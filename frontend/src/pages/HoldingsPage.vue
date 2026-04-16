@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Delete, Plus } from '@element-plus/icons-vue'
+import * as echarts from 'echarts'
+import type { ECharts, EChartsOption } from 'echarts'
 import { fetchInvestmentState, saveInvestmentStateToDb } from '../lib/api'
 import { convertMoney, displayCurrency, formatMoney, normalizeCurrency } from '../lib/currency'
 import {
@@ -14,24 +16,16 @@ import {
   type InvestmentState,
 } from '../lib/investments'
 
-interface ChartDisplayPoint {
-  id: string
-  date: string
-  currency: string
-  total: number
-  displayTotal: number
-  x: number
-  y: number
-}
-
 const investments = ref<InvestmentState>(emptyInvestmentState())
 const selectedSnapshotId = ref('')
 const loaded = ref(false)
 const saveError = ref('')
 const showEditor = ref(false)
-const hoveredPoint = ref<ChartDisplayPoint | null>(null)
+const chartEl = ref<HTMLDivElement | null>(null)
+const activeChartPoint = ref<{ date: string; displayTotal: number } | null>(null)
 const historyPage = ref(1)
 const historyPageSize = 10
+let chart: ECharts | null = null
 
 const snapshots = computed(() => sortedSnapshots(investments.value))
 const pagedSnapshots = computed(() => {
@@ -43,89 +37,24 @@ const selectedSnapshot = computed<InvestmentSnapshot | undefined>(() => snapshot
 const latestTotal = computed(() => snapshotTotal(latestSnapshot.value))
 const selectedTotal = computed(() => snapshotTotal(selectedSnapshot.value))
 const chartPoints = computed(() => trendPoints(investments.value))
-const chartModel = computed(() => {
-  const points = chartPoints.value
-  const width = 1100
-  const height = 340
-  const pad = { top: 22, right: 28, bottom: 58, left: 72 }
-  const chartLeft = pad.left
-  const chartRight = width - pad.right
-  const chartTop = pad.top
-  const chartBottom = height - pad.bottom
-
-  if (!points.length) {
-    const yTicks = Array.from({ length: 5 }, (_, index) => ({
-      y: chartTop + (index / 4) * (chartBottom - chartTop),
-      value: 0,
-    }))
-    return {
-      width,
-      height,
-      chartLeft,
-      chartRight,
-      chartTop,
-      chartBottom,
-      yTicks,
-      linePath: '',
-      areaPath: '',
-      points: [],
-      min: 0,
-      max: 0,
-      first: undefined,
-      latest: undefined,
-      delta: 0,
-      deltaPercent: 0,
-    }
-  }
-
-  const normalized = points.map((point) => ({
-    ...point,
+const chartSeries = computed(() =>
+  chartPoints.value.map((point) => ({
+    date: point.date,
     displayTotal: convertMoney(point.total, normalizeCurrency(point.currency), displayCurrency.value),
-  }))
-  const totals = normalized.map((point) => point.displayTotal)
-  const min = Math.min(...totals)
-  const max = Math.max(...totals)
-  const range = max - min || 1
-  const yTicks = Array.from({ length: 5 }, (_, index) => {
-    const ratio = index / 4
-    return {
-      y: chartTop + ratio * (chartBottom - chartTop),
-      value: max - ratio * range,
-    }
-  })
-  const innerWidth = chartRight - chartLeft
-  const innerHeight = chartBottom - chartTop
-  const coords: ChartDisplayPoint[] = normalized.map((point, index) => {
-    const x = chartLeft + (normalized.length === 1 ? innerWidth / 2 : (index / (normalized.length - 1)) * innerWidth)
-    const y = chartTop + (1 - (point.displayTotal - min) / range) * innerHeight
-    return { ...point, x, y }
-  })
-  const linePath = coords.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')
-  const first = coords[0]!
-  const latest = coords[coords.length - 1]!
-  const areaPath = `${linePath} L ${latest.x.toFixed(2)} ${chartBottom} L ${first.x.toFixed(2)} ${chartBottom} Z`
-  const delta = latest.displayTotal - first.displayTotal
-
+  })),
+)
+const chartStats = computed(() => {
+  const points = chartSeries.value
+  const first = points[0]
+  const latest = points[points.length - 1]
+  const delta = first && latest ? latest.displayTotal - first.displayTotal : 0
   return {
-    width,
-    height,
-    chartLeft,
-    chartRight,
-    chartTop,
-    chartBottom,
-    yTicks,
-    linePath,
-    areaPath,
-    points: coords,
-    min,
-    max,
     first,
     latest,
     delta,
-    deltaPercent: first.displayTotal ? (delta / first.displayTotal) * 100 : 0,
+    deltaPercent: first?.displayTotal ? (delta / first.displayTotal) * 100 : 0,
   }
 })
-const activeChartPoint = computed(() => hoveredPoint.value ?? chartModel.value.latest)
 
 watch(
   investments,
@@ -150,6 +79,19 @@ watch(snapshots, (nextSnapshots) => {
 
 onMounted(async () => {
   await loadInvestments()
+  await nextTick()
+  initChart()
+  renderChart()
+  window.addEventListener('resize', resizeChart)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeChart)
+  chart?.dispose()
+})
+
+watch([chartSeries, displayCurrency], () => {
+  renderChart()
 })
 
 async function loadInvestments() {
@@ -200,12 +142,95 @@ function removeItem(id: string) {
   selectedSnapshot.value.items = selectedSnapshot.value.items.filter((item) => item.id !== id)
 }
 
-function focusChartPoint(point: ChartDisplayPoint) {
-  hoveredPoint.value = point
+function initChart() {
+  if (!chartEl.value || chart) return
+  chart = echarts.init(chartEl.value)
+  chart.on('mouseover', (params) => {
+    if (typeof params.dataIndex === 'number') {
+      activeChartPoint.value = chartSeries.value[params.dataIndex] ?? chartStats.value.latest ?? null
+    }
+  })
+  chart.on('globalout', () => {
+    activeChartPoint.value = chartStats.value.latest ?? null
+  })
 }
 
-function clearChartPoint() {
-  hoveredPoint.value = null
+function renderChart() {
+  if (!chart) return
+  activeChartPoint.value = activeChartPoint.value ?? chartStats.value.latest ?? null
+  const points = chartSeries.value
+  const option: EChartsOption = {
+    animationDuration: 450,
+    color: ['#1f7a63'],
+    grid: { left: 74, right: 28, top: 24, bottom: 50, containLabel: false },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'line',
+        lineStyle: { color: '#7d8ca0', width: 1, type: 'dashed' },
+        label: {
+          show: true,
+          formatter: (params) => String(params.value),
+        },
+      },
+      formatter: (params) => {
+        const item = Array.isArray(params) ? params[0] : params
+        if (!item) return ''
+        const point = points[item.dataIndex ?? 0]
+        if (!point) return ''
+        activeChartPoint.value = point
+        return `${point.date}<br/><strong>${formatMoney(point.displayTotal, displayCurrency.value)}</strong>`
+      },
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: points.map((point) => point.date),
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: '#cfd8d3' } },
+      axisLabel: {
+        color: '#68716d',
+        hideOverlap: true,
+        formatter: (value: string) => value.slice(0, 7),
+      },
+    },
+    yAxis: {
+      type: 'value',
+      scale: true,
+      splitNumber: 5,
+      axisLabel: {
+        color: '#68716d',
+        formatter: (value: number) => formatMoney(value, displayCurrency.value),
+      },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { color: '#dce4df' } },
+    },
+    series: [
+      {
+        type: 'line',
+        name: 'Assets',
+        data: points.map((point) => point.displayTotal),
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        showSymbol: false,
+        emphasis: { focus: 'series', scale: true },
+        lineStyle: { width: 3, color: '#1f7a63' },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(31, 122, 99, 0.3)' },
+            { offset: 1, color: 'rgba(31, 122, 99, 0.02)' },
+          ]),
+        },
+      },
+    ],
+  }
+  chart.setOption(option, true)
+}
+
+function resizeChart() {
+  chart?.resize()
 }
 
 function percent(value: number) {
@@ -235,88 +260,20 @@ function percent(value: number) {
           <div>
             <h2>Investment Trend</h2>
             <span class="section-subtitle">
-              {{ activeChartPoint?.date ?? 'No data' }}
+              {{ activeChartPoint?.date ?? chartStats.latest?.date ?? 'No data' }}
               <template v-if="activeChartPoint"> / {{ formatMoney(activeChartPoint.displayTotal, displayCurrency) }}</template>
             </span>
           </div>
-          <div class="trend-stat" :class="{ positive: chartModel.delta >= 0, negative: chartModel.delta < 0 }">
-            <strong>{{ formatMoney(chartModel.delta, displayCurrency) }}</strong>
-            <span>{{ percent(chartModel.deltaPercent) }}</span>
+          <div class="trend-stat" :class="{ positive: chartStats.delta >= 0, negative: chartStats.delta < 0 }">
+            <strong>{{ formatMoney(chartStats.delta, displayCurrency) }}</strong>
+            <span>{{ percent(chartStats.deltaPercent) }}</span>
           </div>
         </div>
-        <svg
-          class="trend-chart"
-          :viewBox="`0 0 ${chartModel.width} ${chartModel.height}`"
-          preserveAspectRatio="none"
-          role="img"
-          aria-label="Investment total trend"
-          @mouseleave="clearChartPoint"
-        >
-          <defs>
-            <linearGradient id="investmentTrendFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stop-color="#1f7a63" stop-opacity="0.28" />
-              <stop offset="100%" stop-color="#1f7a63" stop-opacity="0.02" />
-            </linearGradient>
-          </defs>
-          <g class="chart-grid">
-            <line
-              v-for="tick in chartModel.yTicks"
-              :key="tick.y"
-              :x1="chartModel.chartLeft"
-              :y1="tick.y"
-              :x2="chartModel.chartRight"
-              :y2="tick.y"
-            />
-          </g>
-          <g class="chart-y-axis">
-            <text
-              v-for="tick in chartModel.yTicks"
-              :key="`${tick.y}-label`"
-              :x="chartModel.chartLeft + 8"
-              :y="tick.y - 6"
-              class="chart-label"
-            >
-              {{ formatMoney(tick.value, displayCurrency) }}
-            </text>
-          </g>
-          <path v-if="chartModel.areaPath" :d="chartModel.areaPath" class="chart-area" />
-          <path v-if="chartModel.linePath" :d="chartModel.linePath" class="chart-line" />
-          <line
-            v-if="activeChartPoint"
-            :x1="activeChartPoint.x"
-            :y1="chartModel.chartTop"
-            :x2="activeChartPoint.x"
-            :y2="chartModel.chartBottom"
-            class="chart-focus-line"
-          />
-          <circle v-for="point in chartModel.points" :key="point.id" :cx="point.x" :cy="point.y" r="2.6" class="chart-point" />
-          <circle v-if="activeChartPoint" :cx="activeChartPoint.x" :cy="activeChartPoint.y" r="5" class="chart-current-dot" />
-          <text
-            v-if="activeChartPoint"
-            :x="activeChartPoint.x"
-            :y="chartModel.chartBottom + 37"
-            class="chart-x-focus-label"
-            text-anchor="middle"
-          >
-            {{ activeChartPoint.date }}
-          </text>
-          <circle
-            v-for="point in chartModel.points"
-            :key="`${point.id}-hit`"
-            :cx="point.x"
-            :cy="point.y"
-            r="11"
-            class="chart-hit-area"
-            tabindex="0"
-            @mouseenter="focusChartPoint(point)"
-            @focus="focusChartPoint(point)"
-            @blur="clearChartPoint"
-          />
-        </svg>
+        <div ref="chartEl" class="trend-chart" role="img" aria-label="Investment total trend"></div>
         <div class="trend-labels">
-          <span>{{ chartModel.first?.date ?? 'No data' }}</span>
+          <span>{{ chartStats.first?.date ?? 'No data' }}</span>
           <strong>{{ activeChartPoint ? formatMoney(activeChartPoint.displayTotal, displayCurrency) : formatMoney(0, displayCurrency) }}</strong>
-          <span>{{ chartModel.latest?.date ?? '' }}</span>
+          <span>{{ chartStats.latest?.date ?? '' }}</span>
         </div>
       </section>
 
