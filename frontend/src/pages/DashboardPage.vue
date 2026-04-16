@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { fetchFinanceState } from '../lib/api'
 import { formatMoney } from '../lib/currency'
 import { emptyMonth, sampleFinanceState, summarizeMonth } from '../lib/finance'
-import { allocationByAssetClass, summarizePortfolio, type RiskLevel } from '../lib/portfolio'
+import { allocationByAssetClass, summarizePortfolio } from '../lib/portfolio'
 import { loadHoldings } from '../lib/storage'
 
 const holdings = ref(loadHoldings())
@@ -13,21 +13,11 @@ const currentMonth = computed(() => finance.value.months[0] ?? emptyMonth())
 const financeSummary = computed(() => summarizeMonth(currentMonth.value))
 const portfolioSummary = computed(() => summarizePortfolio(holdings.value))
 const allocation = computed(() => allocationByAssetClass(holdings.value))
-const riskCounts = computed(() => {
-  return holdings.value.reduce<Record<RiskLevel, number>>(
-    (acc, holding) => {
-      acc[holding.risk] += 1
-      return acc
-    },
-    { Low: 0, Medium: 0, High: 0 },
-  )
-})
-
-const topMovers = computed(() =>
-  [...holdings.value]
-    .filter((holding) => holding.symbol)
-    .sort((a, b) => Math.abs(b.marketPrice - b.averageCost) * b.quantity - Math.abs(a.marketPrice - a.averageCost) * a.quantity)
-    .slice(0, 5),
+const topAssets = computed(() =>
+  [...currentMonth.value.assets]
+    .filter((asset) => asset.name || asset.amount)
+    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+    .slice(0, 12),
 )
 
 onMounted(async () => {
@@ -129,29 +119,13 @@ function percent(value: number) {
 
       <section class="panel">
         <div class="section-head">
-          <h2>Risk Mix</h2>
-          <span>{{ holdings.length }} holdings</span>
+          <h2>Assets</h2>
+          <span>{{ currentMonth.label }}</span>
         </div>
-        <div class="risk-list">
-          <div class="risk-row low">
-            <span>Low</span>
-            <strong>{{ riskCounts.Low }}</strong>
-          </div>
-          <div class="risk-row medium">
-            <span>Medium</span>
-            <strong>{{ riskCounts.Medium }}</strong>
-          </div>
-          <div class="risk-row high">
-            <span>High</span>
-            <strong>{{ riskCounts.High }}</strong>
-          </div>
-        </div>
-
-        <h2 class="subhead">Largest Moves</h2>
-        <div class="mover-list">
-          <div v-for="holding in topMovers" :key="holding.id" class="mover-row">
-            <span>{{ holding.symbol }}</span>
-            <strong>{{ formatMoney((holding.marketPrice - holding.averageCost) * holding.quantity, 'USD') }}</strong>
+        <div class="asset-list">
+          <div v-for="asset in topAssets" :key="asset.id" class="asset-row">
+            <span>{{ asset.name }}</span>
+            <strong>{{ formatMoney(asset.amount, currentMonth.currency) }}</strong>
           </div>
         </div>
       </section>
