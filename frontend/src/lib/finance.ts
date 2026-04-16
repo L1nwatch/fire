@@ -223,7 +223,7 @@ export function summarizeMonth(month: FinancialMonth): FinanceSummary {
   const totalIncome = sumItems(month.income)
   const totalExpenses = sumItems(month.expenses)
   const totalAssets = sumItems(month.assets)
-  const totalLiabilities = sumItems(month.liabilities)
+  const totalLiabilities = -Math.abs(sumItems(month.liabilities))
   const monthlyCashFlow = roundMoney(totalIncome + totalExpenses)
   const netWorth = roundMoney(totalAssets + totalLiabilities)
 

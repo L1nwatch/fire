@@ -1,0 +1,9 @@
+[project]
+name = "fire-backend"
+version = "0.1.0"
+description = "FastAPI + SQLite backend for Fire finance workbook"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.116.1",
+    "uvicorn[standard]==0.35.0",
+]

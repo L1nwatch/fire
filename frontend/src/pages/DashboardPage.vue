@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { emptyMonth, summarizeMonth } from '../lib/finance'
+import { computed, onMounted, ref } from 'vue'
+import { fetchFinanceState } from '../lib/api'
+import { emptyMonth, sampleFinanceState, summarizeMonth } from '../lib/finance'
 import { allocationByAssetClass, summarizePortfolio, type RiskLevel } from '../lib/portfolio'
-import { loadFinanceState, loadHoldings } from '../lib/storage'
+import { loadHoldings } from '../lib/storage'
 
 const holdings = ref(loadHoldings())
-const finance = ref(loadFinanceState())
+const finance = ref(sampleFinanceState)
+const loadError = ref('')
 const currentMonth = computed(() => finance.value.months[0] ?? emptyMonth())
 const financeSummary = computed(() => summarizeMonth(currentMonth.value))
 const portfolioSummary = computed(() => summarizePortfolio(holdings.value))
@@ -27,6 +29,15 @@ const topMovers = computed(() =>
     .slice(0, 5),
 )
 
+onMounted(async () => {
+  try {
+    finance.value = await fetchFinanceState()
+    loadError.value = ''
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : 'Failed to load finance database'
+  }
+})
+
 function money(value: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
 }
@@ -46,6 +57,8 @@ function percent(value: number) {
       </div>
       <el-button type="primary" tag="router-link" to="/monthly">Update Month</el-button>
     </div>
+
+    <el-alert v-if="loadError" :title="loadError" type="warning" show-icon :closable="false" class="page-alert" />
 
     <div class="metric-grid">
       <article class="metric-card">

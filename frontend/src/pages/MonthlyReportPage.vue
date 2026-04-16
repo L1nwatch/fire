@@ -1,21 +1,35 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { Delete, Plus } from '@element-plus/icons-vue'
-import { emptyItem, emptyMonth, summarizeMonth, type FinancialMonth, type MoneySection } from '../lib/finance'
-import { loadFinanceState, resetFinanceState, saveFinanceState } from '../lib/storage'
+import { fetchFinanceState, saveFinanceStateToDb } from '../lib/api'
+import { emptyItem, emptyMonth, sampleFinanceState, summarizeMonth, type FinancialMonth, type MoneySection } from '../lib/finance'
 
 type MoneyItemKey = 'income' | 'expenses' | 'assets' | 'liabilities'
 
-const finance = ref(loadFinanceState())
+const finance = ref(sampleFinanceState)
 const selectedMonthId = ref(finance.value.months[0]?.id ?? '')
 const selectedMonth = computed<FinancialMonth>(() => finance.value.months.find((month) => month.id === selectedMonthId.value) ?? finance.value.months[0] ?? emptyMonth())
 const summary = computed(() => summarizeMonth(selectedMonth.value))
+const loaded = ref(false)
+const saveError = ref('')
 
 watch(
   finance,
-  (nextState) => saveFinanceState(nextState),
+  async (nextState) => {
+    if (!loaded.value) return
+    try {
+      await saveFinanceStateToDb(nextState)
+      saveError.value = ''
+    } catch (error) {
+      saveError.value = error instanceof Error ? error.message : 'Failed to save finance database'
+    }
+  },
   { deep: true },
 )
+
+onMounted(async () => {
+  await reloadFromDb()
+})
 
 function addMonth() {
   const month = emptyMonth()
@@ -23,9 +37,20 @@ function addMonth() {
   selectedMonthId.value = month.id
 }
 
-function resetAll() {
-  finance.value = resetFinanceState()
-  selectedMonthId.value = finance.value.months[0]?.id ?? ''
+async function reloadFromDb() {
+  try {
+    finance.value = await fetchFinanceState()
+    selectedMonthId.value = finance.value.months[0]?.id ?? ''
+    loaded.value = true
+    saveError.value = ''
+  } catch (error) {
+    loaded.value = true
+    saveError.value = error instanceof Error ? error.message : 'Failed to load finance database'
+  }
+}
+
+async function resetAll() {
+  await reloadFromDb()
 }
 
 function addItem(section: MoneySection) {
@@ -65,10 +90,12 @@ function money(value: number) {
         <el-select v-model="selectedMonthId" class="month-select">
           <el-option v-for="month in finance.months" :key="month.id" :label="month.label" :value="month.id" />
         </el-select>
-        <el-button @click="resetAll">Reset Sample</el-button>
+        <el-button @click="resetAll">Reload DB</el-button>
         <el-button type="primary" :icon="Plus" @click="addMonth">Add Month</el-button>
       </div>
     </div>
+
+    <el-alert v-if="saveError" :title="saveError" type="warning" show-icon :closable="false" class="page-alert" />
 
     <div v-if="selectedMonth" class="workbook-layout">
       <section class="panel month-editor">

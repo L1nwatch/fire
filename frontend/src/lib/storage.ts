@@ -1,8 +1,6 @@
 import { sampleHoldings, type Holding } from './portfolio'
-import { sampleFinanceState, type FinanceState } from './finance'
 
 const holdingsStorageKey = 'fire.holdings.v1'
-const financeStorageKey = 'fire.finance.v1'
 
 export function loadHoldings(): Holding[] {
   const raw = localStorage.getItem(holdingsStorageKey)
@@ -27,32 +25,4 @@ export function resetHoldings() {
 
 function cloneHoldings(holdings: Holding[]) {
   return holdings.map((holding) => ({ ...holding }))
-}
-
-export function loadFinanceState(): FinanceState {
-  const raw = localStorage.getItem(financeStorageKey)
-  if (!raw) return cloneFinanceState(sampleFinanceState)
-
-  try {
-    const parsed = JSON.parse(raw) as FinanceState
-    if (!Array.isArray(parsed.months) || !Array.isArray(parsed.ledger) || !Array.isArray(parsed.forecast)) {
-      return cloneFinanceState(sampleFinanceState)
-    }
-    return parsed
-  } catch {
-    return cloneFinanceState(sampleFinanceState)
-  }
-}
-
-export function saveFinanceState(state: FinanceState) {
-  localStorage.setItem(financeStorageKey, JSON.stringify(state))
-}
-
-export function resetFinanceState() {
-  localStorage.removeItem(financeStorageKey)
-  return cloneFinanceState(sampleFinanceState)
-}
-
-function cloneFinanceState(state: FinanceState): FinanceState {
-  return JSON.parse(JSON.stringify(state)) as FinanceState
 }

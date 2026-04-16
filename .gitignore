@@ -1,2 +1,6 @@
 2023-Canada-财务记账.xlsx
 财务报表.xlsx
+data/*.sqlite3
+data/*.sqlite3-*
+__pycache__/
+*.pyc

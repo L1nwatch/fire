@@ -1,17 +1,38 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { Delete, Plus } from '@element-plus/icons-vue'
-import { emptyForecastEntry, forecastExpense, forecastNet } from '../lib/finance'
-import { loadFinanceState, saveFinanceState } from '../lib/storage'
+import { fetchFinanceState, saveFinanceStateToDb } from '../lib/api'
+import { emptyForecastEntry, forecastExpense, forecastNet, sampleFinanceState } from '../lib/finance'
 
-const finance = ref(loadFinanceState())
+const finance = ref(sampleFinanceState)
 const forecast = computed(() => finance.value.forecast)
+const loaded = ref(false)
+const saveError = ref('')
 
 watch(
   finance,
-  (nextState) => saveFinanceState(nextState),
+  async (nextState) => {
+    if (!loaded.value) return
+    try {
+      await saveFinanceStateToDb(nextState)
+      saveError.value = ''
+    } catch (error) {
+      saveError.value = error instanceof Error ? error.message : 'Failed to save finance database'
+    }
+  },
   { deep: true },
 )
+
+onMounted(async () => {
+  try {
+    finance.value = await fetchFinanceState()
+    saveError.value = ''
+  } catch (error) {
+    saveError.value = error instanceof Error ? error.message : 'Failed to load finance database'
+  } finally {
+    loaded.value = true
+  }
+})
 
 function addEntry() {
   finance.value.forecast.push(emptyForecastEntry())
@@ -36,6 +57,8 @@ function money(value: number) {
       </div>
       <el-button type="primary" :icon="Plus" @click="addEntry">Add Forecast</el-button>
     </div>
+
+    <el-alert v-if="saveError" :title="saveError" type="warning" show-icon :closable="false" class="page-alert" />
 
     <section class="sheet-panel">
       <el-table :data="forecast" size="large" class="data-table holdings-table" table-layout="fixed">
