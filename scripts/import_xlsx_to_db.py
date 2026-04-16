@@ -46,6 +46,8 @@ def clear_imported_data(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM financial_months")
     conn.execute("DELETE FROM daily_ledger")
     conn.execute("DELETE FROM forecast_entries")
+    conn.execute("DELETE FROM investment_items")
+    conn.execute("DELETE FROM investment_snapshots")
     conn.execute("DELETE FROM raw_sheet_rows")
 
 
@@ -71,6 +73,7 @@ def import_workbook(conn: sqlite3.Connection, path: Path) -> None:
 
 def import_report_sheet(conn: sqlite3.Connection, workbook: str, sheet: str, rows: list[list[Any]]) -> None:
     month_id = stable_id("month", workbook, sheet)
+    month_label = normalize_month_label(sheet)
     passive_income = number_at(rows, 0, 9)
 
     conn.execute(
@@ -79,7 +82,7 @@ def import_report_sheet(conn: sqlite3.Connection, workbook: str, sheet: str, row
           (id, label, currency, passive_income, conclusion, source_workbook, source_sheet)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (month_id, normalize_month_label(sheet), "CNY", passive_income, "", workbook, sheet),
+        (month_id, month_label, "CNY", passive_income, "", workbook, sheet),
     )
 
     item_specs = [
@@ -112,6 +115,44 @@ def import_report_sheet(conn: sqlite3.Connection, workbook: str, sheet: str, row
                 ),
             )
             position += 1
+
+    import_investment_snapshot_from_assets(conn, workbook, sheet, month_label, rows)
+
+
+def import_investment_snapshot_from_assets(conn: sqlite3.Connection, workbook: str, sheet: str, month_label: str, rows: list[list[Any]]) -> None:
+    snapshot_id = stable_id("investment", workbook, sheet)
+    conn.execute(
+        """
+        INSERT INTO investment_snapshots (id, date, currency, notes)
+        VALUES (?, ?, ?, ?)
+        """,
+        (snapshot_id, month_end_date(month_label), "CNY", f"Imported from {workbook} / {sheet} asset columns"),
+    )
+
+    position = 0
+    for row_index, row in enumerate(rows[1:], start=2):
+        name = text_at(row, 4)
+        amount = numeric(row_value(row, 5))
+        if not name and amount == 0:
+            continue
+        conn.execute(
+            """
+            INSERT INTO investment_items
+              (id, snapshot_id, name, account, category, amount, notes, position)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                stable_id("investment-item", workbook, sheet, row_index, name),
+                snapshot_id,
+                name or "(blank)",
+                "",
+                classify_asset(name),
+                amount,
+                "",
+                position,
+            ),
+        )
+        position += 1
 
 def import_daily_sheet(conn: sqlite3.Connection, workbook: str, sheet: str, rows: list[list[Any]]) -> None:
     for row_index, row in enumerate(rows[2:], start=3):
@@ -190,6 +231,28 @@ def is_daily_sheet(sheet: str, rows: list[list[Any]]) -> bool:
 
 def normalize_month_label(sheet: str) -> str:
     return sheet.replace(".", "-")
+
+
+def month_end_date(month_label: str) -> str:
+    year_text, month_text = month_label.split("-")
+    year = int(year_text)
+    month = int(month_text)
+    if month == 12:
+        next_month = date(year + 1, 1, 1)
+    else:
+        next_month = date(year, month + 1, 1)
+    return (next_month - timedelta(days=1)).isoformat()
+
+
+def classify_asset(name: str) -> str:
+    value = name.lower()
+    if any(token in value for token in ["证券", "stock", "etf", "tfsa", "rrsp", "ibkr", "ws-"]):
+        return "Investment"
+    if any(token in value for token in ["银行", "cash", "现金", "余额", "零钱"]):
+        return "Cash"
+    if "押金" in value:
+        return "Deposit"
+    return "Asset"
 
 
 def summary_value(rows: list[list[Any]], label: str) -> float:
