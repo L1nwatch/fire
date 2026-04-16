@@ -18,6 +18,7 @@ const investments = ref<InvestmentState>(emptyInvestmentState())
 const selectedSnapshotId = ref('')
 const loaded = ref(false)
 const saveError = ref('')
+const showEditor = ref(false)
 
 const snapshots = computed(() => sortedSnapshots(investments.value))
 const latestSnapshot = computed(() => snapshots.value[0])
@@ -78,6 +79,16 @@ function addSnapshot() {
   const snapshot = createSnapshotFromPrevious(latestSnapshot.value)
   investments.value.snapshots.push(snapshot)
   selectedSnapshotId.value = snapshot.id
+  showEditor.value = true
+}
+
+function editSnapshot(id: string) {
+  selectedSnapshotId.value = id
+  showEditor.value = true
+}
+
+function closeEditor() {
+  showEditor.value = false
 }
 
 function deleteSnapshot() {
@@ -85,6 +96,7 @@ function deleteSnapshot() {
   const id = selectedSnapshot.value.id
   investments.value.snapshots = investments.value.snapshots.filter((snapshot) => snapshot.id !== id)
   selectedSnapshotId.value = snapshots.value[0]?.id ?? ''
+  showEditor.value = false
 }
 
 function addItem() {
@@ -106,9 +118,6 @@ function removeItem(id: string) {
         <p>Record all investment assets on a date, copy the last snapshot forward, and track the trend.</p>
       </div>
       <div class="actions">
-        <el-select v-model="selectedSnapshotId" class="month-select">
-          <el-option v-for="snapshot in snapshots" :key="snapshot.id" :label="snapshot.date" :value="snapshot.id" />
-        </el-select>
         <el-button @click="loadInvestments">Reload DB</el-button>
         <el-button type="primary" :icon="Plus" @click="addSnapshot">New From Latest</el-button>
       </div>
@@ -163,7 +172,38 @@ function removeItem(id: string) {
       </section>
     </div>
 
-    <section v-if="selectedSnapshot" class="panel snapshot-editor">
+    <section class="panel snapshot-history">
+      <div class="section-head">
+        <h2>Snapshot History</h2>
+        <span>{{ snapshots.length }} records</span>
+      </div>
+      <el-table :data="snapshots" size="large" class="data-table" table-layout="fixed">
+        <el-table-column label="Date" min-width="140">
+          <template #default="{ row }">
+            <strong>{{ row.date }}</strong>
+          </template>
+        </el-table-column>
+        <el-table-column label="Total Assets" min-width="160" align="right">
+          <template #default="{ row }">{{ formatMoney(snapshotTotal(row), row.currency) }}</template>
+        </el-table-column>
+        <el-table-column label="Currency" min-width="100">
+          <template #default="{ row }">{{ row.currency }}</template>
+        </el-table-column>
+        <el-table-column label="Rows" min-width="90" align="right">
+          <template #default="{ row }">{{ row.items.length }}</template>
+        </el-table-column>
+        <el-table-column label="Update Info" min-width="260">
+          <template #default="{ row }">{{ row.notes || `${row.items.length} assets recorded` }}</template>
+        </el-table-column>
+        <el-table-column label="" width="100" fixed="right" align="center">
+          <template #default="{ row }">
+            <el-button @click="editSnapshot(row.id)">Edit</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
+
+    <section v-if="showEditor && selectedSnapshot" class="panel snapshot-editor">
       <div class="section-head">
         <h2>Snapshot Editor</h2>
         <span>{{ formatMoney(selectedTotal, selectedSnapshot.currency) }}</span>
@@ -191,6 +231,7 @@ function removeItem(id: string) {
       <div class="actions snapshot-actions">
         <el-button :icon="Plus" @click="addItem">Add Asset</el-button>
         <el-button :disabled="snapshots.length <= 1" @click="deleteSnapshot">Delete Snapshot</el-button>
+        <el-button @click="closeEditor">Close Editor</el-button>
       </div>
 
       <el-table :data="selectedSnapshot.items" size="large" class="data-table holdings-table" table-layout="fixed">
