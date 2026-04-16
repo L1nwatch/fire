@@ -19,8 +19,14 @@ const selectedSnapshotId = ref('')
 const loaded = ref(false)
 const saveError = ref('')
 const showEditor = ref(false)
+const historyPage = ref(1)
+const historyPageSize = 10
 
 const snapshots = computed(() => sortedSnapshots(investments.value))
+const pagedSnapshots = computed(() => {
+  const start = (historyPage.value - 1) * historyPageSize
+  return snapshots.value.slice(start, start + historyPageSize)
+})
 const latestSnapshot = computed(() => snapshots.value[0])
 const selectedSnapshot = computed<InvestmentSnapshot | undefined>(() => snapshots.value.find((snapshot) => snapshot.id === selectedSnapshotId.value) ?? latestSnapshot.value)
 const latestTotal = computed(() => snapshotTotal(latestSnapshot.value))
@@ -55,6 +61,13 @@ watch(
   },
   { deep: true },
 )
+
+watch(snapshots, (nextSnapshots) => {
+  const maxPage = Math.max(1, Math.ceil(nextSnapshots.length / historyPageSize))
+  if (historyPage.value > maxPage) {
+    historyPage.value = maxPage
+  }
+})
 
 onMounted(async () => {
   await loadInvestments()
@@ -177,7 +190,7 @@ function removeItem(id: string) {
         <h2>Snapshot History</h2>
         <span>{{ snapshots.length }} records</span>
       </div>
-      <el-table :data="snapshots" size="large" class="data-table" table-layout="fixed">
+      <el-table :data="pagedSnapshots" size="large" class="data-table" table-layout="fixed">
         <el-table-column label="Date" min-width="140">
           <template #default="{ row }">
             <strong>{{ row.date }}</strong>
@@ -201,6 +214,14 @@ function removeItem(id: string) {
           </template>
         </el-table-column>
       </el-table>
+      <el-pagination
+        v-if="snapshots.length > historyPageSize"
+        v-model:current-page="historyPage"
+        class="history-pagination"
+        layout="prev, pager, next, total"
+        :page-size="historyPageSize"
+        :total="snapshots.length"
+      />
     </section>
 
     <section v-if="showEditor && selectedSnapshot" class="panel snapshot-editor">

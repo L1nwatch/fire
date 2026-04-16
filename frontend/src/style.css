@@ -341,6 +341,11 @@ body {
   margin-top: 16px;
 }
 
+.history-pagination {
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
 .snapshot-actions {
   margin-bottom: 12px;
 }
