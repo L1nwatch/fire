@@ -14,11 +14,22 @@ import {
   type InvestmentState,
 } from '../lib/investments'
 
+interface ChartDisplayPoint {
+  id: string
+  date: string
+  currency: string
+  total: number
+  displayTotal: number
+  x: number
+  y: number
+}
+
 const investments = ref<InvestmentState>(emptyInvestmentState())
 const selectedSnapshotId = ref('')
 const loaded = ref(false)
 const saveError = ref('')
 const showEditor = ref(false)
+const hoveredPoint = ref<ChartDisplayPoint | null>(null)
 const historyPage = ref(1)
 const historyPageSize = 10
 
@@ -64,7 +75,7 @@ const chartModel = computed(() => {
   const range = max - min || 1
   const innerWidth = width - pad.left - pad.right
   const innerHeight = height - pad.top - pad.bottom
-  const coords = normalized.map((point, index) => {
+  const coords: ChartDisplayPoint[] = normalized.map((point, index) => {
     const x = pad.left + (normalized.length === 1 ? innerWidth / 2 : (index / (normalized.length - 1)) * innerWidth)
     const y = pad.top + (1 - (point.displayTotal - min) / range) * innerHeight
     return { ...point, x, y }
@@ -89,6 +100,7 @@ const chartModel = computed(() => {
     deltaPercent: first.displayTotal ? (delta / first.displayTotal) * 100 : 0,
   }
 })
+const activeChartPoint = computed(() => hoveredPoint.value ?? chartModel.value.latest)
 
 watch(
   investments,
@@ -163,6 +175,14 @@ function removeItem(id: string) {
   selectedSnapshot.value.items = selectedSnapshot.value.items.filter((item) => item.id !== id)
 }
 
+function focusChartPoint(point: ChartDisplayPoint) {
+  hoveredPoint.value = point
+}
+
+function clearChartPoint() {
+  hoveredPoint.value = null
+}
+
 function percent(value: number) {
   return `${value.toFixed(1)}%`
 }
@@ -189,14 +209,17 @@ function percent(value: number) {
         <div class="section-head">
           <div>
             <h2>Investment Trend</h2>
-            <span class="section-subtitle">{{ chartPoints.length }} snapshots</span>
+            <span class="section-subtitle">
+              {{ activeChartPoint?.date ?? 'No data' }}
+              <template v-if="activeChartPoint"> / {{ formatMoney(activeChartPoint.displayTotal, displayCurrency) }}</template>
+            </span>
           </div>
           <div class="trend-stat" :class="{ positive: chartModel.delta >= 0, negative: chartModel.delta < 0 }">
             <strong>{{ formatMoney(chartModel.delta, displayCurrency) }}</strong>
             <span>{{ percent(chartModel.deltaPercent) }}</span>
           </div>
         </div>
-        <svg class="trend-chart" :viewBox="`0 0 ${chartModel.width} ${chartModel.height}`" role="img" aria-label="Investment total trend">
+        <svg class="trend-chart" :viewBox="`0 0 ${chartModel.width} ${chartModel.height}`" role="img" aria-label="Investment total trend" @mouseleave="clearChartPoint">
           <defs>
             <linearGradient id="investmentTrendFill" x1="0" x2="0" y1="0" y2="1">
               <stop offset="0%" stop-color="#1f7a63" stop-opacity="0.28" />
@@ -214,12 +237,25 @@ function percent(value: number) {
           <text x="54" y="247" class="chart-label">{{ formatMoney(chartModel.min, displayCurrency) }}</text>
           <path v-if="chartModel.areaPath" :d="chartModel.areaPath" class="chart-area" />
           <path v-if="chartModel.linePath" :d="chartModel.linePath" class="chart-line" />
+          <line v-if="activeChartPoint" :x1="activeChartPoint.x" y1="22" :x2="activeChartPoint.x" y2="226" class="chart-focus-line" />
           <circle v-for="point in chartModel.points" :key="point.id" :cx="point.x" :cy="point.y" r="2.6" class="chart-point" />
-          <circle v-if="chartModel.latest" :cx="chartModel.latest.x" :cy="chartModel.latest.y" r="5" class="chart-current-dot" />
+          <circle v-if="activeChartPoint" :cx="activeChartPoint.x" :cy="activeChartPoint.y" r="5" class="chart-current-dot" />
+          <circle
+            v-for="point in chartModel.points"
+            :key="`${point.id}-hit`"
+            :cx="point.x"
+            :cy="point.y"
+            r="11"
+            class="chart-hit-area"
+            tabindex="0"
+            @mouseenter="focusChartPoint(point)"
+            @focus="focusChartPoint(point)"
+            @blur="clearChartPoint"
+          />
         </svg>
         <div class="trend-labels">
           <span>{{ chartModel.first?.date ?? 'No data' }}</span>
-          <strong>{{ chartModel.latest ? formatMoney(chartModel.latest.displayTotal, displayCurrency) : formatMoney(0, displayCurrency) }}</strong>
+          <strong>{{ activeChartPoint ? formatMoney(activeChartPoint.displayTotal, displayCurrency) : formatMoney(0, displayCurrency) }}</strong>
           <span>{{ chartModel.latest?.date ?? '' }}</span>
         </div>
       </section>

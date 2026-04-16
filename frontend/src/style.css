@@ -290,6 +290,7 @@ body {
 }
 
 .trend-panel {
+  grid-column: 1 / -1;
   min-height: 340px;
 }
 
@@ -357,6 +358,18 @@ body {
   stroke: #ffffff;
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
+}
+
+.chart-focus-line {
+  stroke: #7d8ca0;
+  stroke-dasharray: 4 5;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-hit-area {
+  fill: transparent;
+  cursor: crosshair;
 }
 
 .trend-labels {
