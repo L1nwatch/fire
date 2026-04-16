@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { fetchFinanceState } from '../lib/api'
+import { formatMoney } from '../lib/currency'
 import { emptyMonth, sampleFinanceState, summarizeMonth } from '../lib/finance'
 import { allocationByAssetClass, summarizePortfolio, type RiskLevel } from '../lib/portfolio'
 import { loadHoldings } from '../lib/storage'
@@ -38,10 +39,6 @@ onMounted(async () => {
   }
 })
 
-function money(value: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
-}
-
 function percent(value: number) {
   return `${value.toFixed(1)}%`
 }
@@ -63,20 +60,20 @@ function percent(value: number) {
     <div class="metric-grid">
       <article class="metric-card">
         <span>Net Worth</span>
-        <strong>{{ money(financeSummary.netWorth) }}</strong>
-        <small>{{ money(financeSummary.totalAssets) }} assets</small>
+        <strong>{{ formatMoney(financeSummary.netWorth, currentMonth.currency) }}</strong>
+        <small>{{ formatMoney(financeSummary.totalAssets, currentMonth.currency) }} assets</small>
       </article>
       <article class="metric-card">
         <span>Monthly Cash Flow</span>
         <strong :class="{ positive: financeSummary.monthlyCashFlow >= 0, negative: financeSummary.monthlyCashFlow < 0 }">
-          {{ money(financeSummary.monthlyCashFlow) }}
+          {{ formatMoney(financeSummary.monthlyCashFlow, currentMonth.currency) }}
         </strong>
         <small>{{ percent(financeSummary.savingsRate) }} savings rate</small>
       </article>
       <article class="metric-card">
         <span>Investment Value</span>
-        <strong>{{ money(portfolioSummary.marketValue) }}</strong>
-        <small>{{ money(portfolioSummary.gainLoss) }} gain / loss</small>
+        <strong>{{ formatMoney(portfolioSummary.marketValue, 'USD') }}</strong>
+        <small>{{ formatMoney(portfolioSummary.gainLoss, 'USD') }} gain / loss</small>
       </article>
     </div>
 
@@ -89,19 +86,19 @@ function percent(value: number) {
         <div class="report-stack">
           <div class="report-row">
             <span>Total income</span>
-            <strong>{{ money(financeSummary.totalIncome) }}</strong>
+            <strong>{{ formatMoney(financeSummary.totalIncome, currentMonth.currency) }}</strong>
           </div>
           <div class="report-row">
             <span>Total spending</span>
-            <strong class="negative">{{ money(financeSummary.totalExpenses) }}</strong>
+            <strong class="negative">{{ formatMoney(financeSummary.totalExpenses, currentMonth.currency) }}</strong>
           </div>
           <div class="report-row">
             <span>Passive income</span>
-            <strong>{{ money(financeSummary.passiveIncome) }}</strong>
+            <strong>{{ formatMoney(financeSummary.passiveIncome, currentMonth.currency) }}</strong>
           </div>
           <div class="report-row">
             <span>Liabilities</span>
-            <strong class="negative">{{ money(financeSummary.totalLiabilities) }}</strong>
+            <strong class="negative">{{ formatMoney(financeSummary.totalLiabilities, currentMonth.currency) }}</strong>
           </div>
         </div>
       </section>
@@ -114,7 +111,7 @@ function percent(value: number) {
         <el-table :data="allocation" size="large" class="data-table">
           <el-table-column prop="label" label="Asset" min-width="120" />
           <el-table-column label="Value" min-width="130" align="right">
-            <template #default="{ row }">{{ money(row.value) }}</template>
+            <template #default="{ row }">{{ formatMoney(row.value, 'USD') }}</template>
           </el-table-column>
           <el-table-column label="Weight" min-width="110" align="right">
             <template #default="{ row }">{{ percent(row.weight) }}</template>
@@ -154,7 +151,7 @@ function percent(value: number) {
         <div class="mover-list">
           <div v-for="holding in topMovers" :key="holding.id" class="mover-row">
             <span>{{ holding.symbol }}</span>
-            <strong>{{ money((holding.marketPrice - holding.averageCost) * holding.quantity) }}</strong>
+            <strong>{{ formatMoney((holding.marketPrice - holding.averageCost) * holding.quantity, 'USD') }}</strong>
           </div>
         </div>
       </section>

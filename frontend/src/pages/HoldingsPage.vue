@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { Delete, Plus } from '@element-plus/icons-vue'
+import { formatMoney } from '../lib/currency'
 import {
   assetClasses,
   createHolding,
@@ -37,10 +38,6 @@ function restoreSampleData() {
   holdings.value = resetHoldings()
 }
 
-function money(value: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
-}
-
 function percent(value: number) {
   return `${value.toFixed(1)}%`
 }
@@ -61,10 +58,10 @@ function percent(value: number) {
     </div>
 
     <div class="sheet-summary">
-      <span>Total {{ money(summary.marketValue) }}</span>
-      <span>Basis {{ money(summary.costBasis) }}</span>
+      <span>Total {{ formatMoney(summary.marketValue, 'USD') }}</span>
+      <span>Basis {{ formatMoney(summary.costBasis, 'USD') }}</span>
       <span :class="{ positive: summary.gainLoss >= 0, negative: summary.gainLoss < 0 }">
-        Return {{ money(summary.gainLoss) }} / {{ percent(summary.gainLossPercent) }}
+        Return {{ formatMoney(summary.gainLoss, 'USD') }} / {{ percent(summary.gainLossPercent) }}
       </span>
     </div>
 
@@ -108,12 +105,12 @@ function percent(value: number) {
           </template>
         </el-table-column>
         <el-table-column label="Value" min-width="120" align="right">
-          <template #default="{ row }">{{ money(holdingValue(row)) }}</template>
+          <template #default="{ row }">{{ formatMoney(holdingValue(row), 'USD') }}</template>
         </el-table-column>
         <el-table-column label="Gain" min-width="120" align="right">
           <template #default="{ row }">
             <span :class="{ positive: holdingGainLoss(row) >= 0, negative: holdingGainLoss(row) < 0 }">
-              {{ money(holdingGainLoss(row)) }}
+              {{ formatMoney(holdingGainLoss(row), 'USD') }}
             </span>
           </template>
         </el-table-column>

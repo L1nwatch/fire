@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import { fetchFinanceState, saveFinanceStateToDb } from '../lib/api'
+import { formatMoney } from '../lib/currency'
 import { emptyLedgerEntry, sampleFinanceState, summarizeLedger } from '../lib/finance'
 
 const finance = ref(sampleFinanceState)
@@ -43,9 +44,6 @@ function removeEntry(id: string) {
   finance.value.ledger = finance.value.ledger.filter((entry) => entry.id !== id)
 }
 
-function money(value: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'CAD' }).format(value)
-}
 </script>
 
 <template>
@@ -62,11 +60,11 @@ function money(value: number) {
     <el-alert v-if="saveError" :title="saveError" type="warning" show-icon :closable="false" class="page-alert" />
 
     <div class="sheet-summary">
-      <span>Income {{ money(summary.income) }}</span>
-      <span>Expense {{ money(summary.expense) }}</span>
-      <span>Food {{ money(summary.food) }}</span>
-      <span>Transport {{ money(summary.transport) }}</span>
-      <span>Rent {{ money(summary.rent) }}</span>
+      <span>Income {{ formatMoney(summary.income, 'CAD') }}</span>
+      <span>Expense {{ formatMoney(summary.expense, 'CAD') }}</span>
+      <span>Food {{ formatMoney(summary.food, 'CAD') }}</span>
+      <span>Transport {{ formatMoney(summary.transport, 'CAD') }}</span>
+      <span>Rent {{ formatMoney(summary.rent, 'CAD') }}</span>
     </div>
 
     <section class="sheet-panel">

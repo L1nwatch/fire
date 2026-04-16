@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import { fetchFinanceState, saveFinanceStateToDb } from '../lib/api'
+import { formatMoney } from '../lib/currency'
 import { emptyForecastEntry, forecastExpense, forecastNet, sampleFinanceState } from '../lib/finance'
 
 const finance = ref(sampleFinanceState)
@@ -42,9 +43,6 @@ function removeEntry(id: string) {
   finance.value.forecast = finance.value.forecast.filter((entry) => entry.id !== id)
 }
 
-function money(value: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'CAD' }).format(value)
-}
 </script>
 
 <template>
@@ -97,11 +95,11 @@ function money(value: number) {
         </el-table-column>
         <el-table-column label="Net" min-width="130" align="right">
           <template #default="{ row }">
-            <span :class="{ positive: forecastNet(row) >= 0, negative: forecastNet(row) < 0 }">{{ money(forecastNet(row)) }}</span>
+            <span :class="{ positive: forecastNet(row) >= 0, negative: forecastNet(row) < 0 }">{{ formatMoney(forecastNet(row), 'CAD') }}</span>
           </template>
         </el-table-column>
         <el-table-column label="Expense" min-width="130" align="right">
-          <template #default="{ row }">{{ money(forecastExpense(row)) }}</template>
+          <template #default="{ row }">{{ formatMoney(forecastExpense(row), 'CAD') }}</template>
         </el-table-column>
         <el-table-column label="Comment" min-width="240">
           <template #default="{ row }"><el-input v-model="row.comment" /></template>

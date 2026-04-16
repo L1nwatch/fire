@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import { fetchFinanceState, saveFinanceStateToDb } from '../lib/api'
+import { formatMoney } from '../lib/currency'
 import { emptyItem, emptyMonth, sampleFinanceState, summarizeMonth, type FinancialMonth, type MoneySection } from '../lib/finance'
 
 type MoneyItemKey = 'income' | 'expenses' | 'assets' | 'liabilities'
@@ -73,9 +74,6 @@ function sectionKey(section: MoneySection): MoneyItemKey {
   return 'income'
 }
 
-function money(value: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'CAD' }).format(value)
-}
 </script>
 
 <template>
@@ -119,18 +117,18 @@ function money(value: number) {
       <section class="metric-grid workbook-metrics">
         <article class="metric-card">
           <span>Total income</span>
-          <strong>{{ money(summary.totalIncome) }}</strong>
-          <small>{{ money(summary.passiveIncome) }} passive</small>
+          <strong>{{ formatMoney(summary.totalIncome, selectedMonth.currency) }}</strong>
+          <small>{{ formatMoney(summary.passiveIncome, selectedMonth.currency) }} passive</small>
         </article>
         <article class="metric-card">
           <span>Total spending</span>
-          <strong class="negative">{{ money(summary.totalExpenses) }}</strong>
-          <small>{{ money(summary.monthlyCashFlow) }} cash flow</small>
+          <strong class="negative">{{ formatMoney(summary.totalExpenses, selectedMonth.currency) }}</strong>
+          <small>{{ formatMoney(summary.monthlyCashFlow, selectedMonth.currency) }} cash flow</small>
         </article>
         <article class="metric-card">
           <span>Net worth</span>
-          <strong>{{ money(summary.netWorth) }}</strong>
-          <small>{{ money(summary.totalLiabilities) }} liabilities</small>
+          <strong>{{ formatMoney(summary.netWorth, selectedMonth.currency) }}</strong>
+          <small>{{ formatMoney(summary.totalLiabilities, selectedMonth.currency) }} liabilities</small>
         </article>
       </section>
 

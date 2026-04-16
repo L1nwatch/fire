@@ -99,6 +99,17 @@ body {
   min-width: 0;
 }
 
+.top-tools {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin: 0 auto 14px;
+  max-width: 1600px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .page-shell {
   max-width: 1260px;
   margin: 0 auto;

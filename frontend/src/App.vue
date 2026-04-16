@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { currencyHint, currencyOptions, displayCurrency, setDisplayCurrency, type CurrencyCode } from './lib/currency'
 
 const route = useRoute()
 
@@ -30,6 +31,20 @@ const activePath = computed(() => {
     </aside>
 
     <main class="content">
+      <div class="top-tools">
+        <span>{{ currencyHint }}</span>
+        <el-button-group>
+          <el-button
+            v-for="currency in currencyOptions"
+            :key="currency"
+            size="small"
+            :type="displayCurrency === currency ? 'primary' : 'default'"
+            @click="setDisplayCurrency(currency as CurrencyCode)"
+          >
+            {{ currency }}
+          </el-button>
+        </el-button-group>
+      </div>
       <router-view />
     </main>
   </div>
