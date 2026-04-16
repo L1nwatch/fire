@@ -282,6 +282,65 @@ body {
   gap: 16px;
 }
 
+.investment-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.8fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.trend-panel {
+  min-height: 280px;
+}
+
+.trend-chart {
+  width: 100%;
+  height: 190px;
+  display: block;
+  background: #f7faf8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.chart-axis {
+  stroke: #c7d2cc;
+  stroke-width: 0.5;
+}
+
+.chart-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-point {
+  fill: var(--accent-strong);
+  vector-effect: non-scaling-stroke;
+}
+
+.trend-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  color: var(--muted);
+}
+
+.trend-labels strong {
+  color: var(--ink);
+  font-size: 20px;
+}
+
+.snapshot-editor {
+  margin-top: 16px;
+}
+
+.snapshot-actions {
+  margin-bottom: 12px;
+}
+
 .workbook-layout > .metric-grid,
 .workbook-layout > .month-editor {
   grid-column: 1 / -1;
@@ -348,6 +407,7 @@ body {
   .metric-grid,
   .dashboard-grid,
   .workbook-layout,
+  .investment-grid,
   .month-fields {
     grid-template-columns: 1fr;
   }

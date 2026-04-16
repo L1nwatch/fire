@@ -86,6 +86,24 @@ def init_db(conn: sqlite3.Connection) -> None:
             row_index INTEGER NOT NULL,
             cells_json TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS investment_snapshots (
+            id TEXT PRIMARY KEY,
+            date TEXT NOT NULL UNIQUE,
+            currency TEXT NOT NULL DEFAULT 'CAD',
+            notes TEXT NOT NULL DEFAULT ''
+        );
+
+        CREATE TABLE IF NOT EXISTS investment_items (
+            id TEXT PRIMARY KEY,
+            snapshot_id TEXT NOT NULL REFERENCES investment_snapshots(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            account TEXT NOT NULL DEFAULT '',
+            category TEXT NOT NULL DEFAULT '',
+            amount REAL NOT NULL DEFAULT 0,
+            notes TEXT NOT NULL DEFAULT '',
+            position INTEGER NOT NULL DEFAULT 0
+        );
         """
     )
     conn.commit()
@@ -267,3 +285,70 @@ def insert_raw_row(conn: sqlite3.Connection, workbook: str, sheet: str, row_inde
         "INSERT INTO raw_sheet_rows (workbook, sheet, row_index, cells_json) VALUES (?, ?, ?, ?)",
         (workbook, sheet, row_index, json.dumps(cells, ensure_ascii=False)),
     )
+
+
+def load_investment_state(conn: sqlite3.Connection) -> dict[str, Any]:
+    snapshots = []
+    rows = conn.execute("SELECT * FROM investment_snapshots ORDER BY date DESC").fetchall()
+    for snapshot in rows:
+        items = conn.execute(
+            "SELECT * FROM investment_items WHERE snapshot_id = ? ORDER BY position, name",
+            (snapshot["id"],),
+        ).fetchall()
+        snapshots.append(
+            {
+                "id": snapshot["id"],
+                "date": snapshot["date"],
+                "currency": snapshot["currency"],
+                "notes": snapshot["notes"],
+                "items": [
+                    {
+                        "id": item["id"],
+                        "name": item["name"],
+                        "account": item["account"],
+                        "category": item["category"],
+                        "amount": item["amount"],
+                        "notes": item["notes"],
+                    }
+                    for item in items
+                ],
+            }
+        )
+    return {"snapshots": snapshots}
+
+
+def save_investment_state(conn: sqlite3.Connection, state: dict[str, Any]) -> None:
+    conn.execute("DELETE FROM investment_items")
+    conn.execute("DELETE FROM investment_snapshots")
+    for snapshot in state.get("snapshots", []):
+        conn.execute(
+            """
+            INSERT INTO investment_snapshots (id, date, currency, notes)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                snapshot["id"],
+                snapshot["date"],
+                snapshot.get("currency", "CAD"),
+                snapshot.get("notes", ""),
+            ),
+        )
+        for position, item in enumerate(snapshot.get("items", [])):
+            conn.execute(
+                """
+                INSERT INTO investment_items
+                  (id, snapshot_id, name, account, category, amount, notes, position)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    item["id"],
+                    snapshot["id"],
+                    item.get("name", ""),
+                    item.get("account", ""),
+                    item.get("category", ""),
+                    float(item.get("amount") or 0),
+                    item.get("notes", ""),
+                    position,
+                ),
+            )
+    conn.commit()

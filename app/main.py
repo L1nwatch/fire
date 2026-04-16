@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.db import connect, init_db, load_finance_state, save_finance_state
+from app.db import connect, init_db, load_finance_state, load_investment_state, save_finance_state, save_investment_state
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 FRONTEND_DIST = ROOT_DIR / "frontend" / "dist"
@@ -47,6 +47,21 @@ def put_finance(state: dict[str, Any]) -> dict[str, bool]:
     with connect() as conn:
         init_db(conn)
         save_finance_state(conn, state)
+    return {"ok": True}
+
+
+@app.get("/api/investments")
+def get_investments() -> dict[str, Any]:
+    with connect() as conn:
+        init_db(conn)
+        return load_investment_state(conn)
+
+
+@app.put("/api/investments")
+def put_investments(state: dict[str, Any]) -> dict[str, bool]:
+    with connect() as conn:
+        init_db(conn)
+        save_investment_state(conn, state)
     return {"ok": True}
 
 

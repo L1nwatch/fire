@@ -1,4 +1,5 @@
 import type { FinanceState } from './finance'
+import type { InvestmentState } from './investments'
 
 const apiBase = import.meta.env.VITE_API_BASE ?? ''
 
@@ -18,5 +19,24 @@ export async function saveFinanceStateToDb(state: FinanceState): Promise<void> {
   })
   if (!response.ok) {
     throw new Error(`Failed to save finance data: ${response.status}`)
+  }
+}
+
+export async function fetchInvestmentState(): Promise<InvestmentState> {
+  const response = await fetch(`${apiBase}/api/investments`)
+  if (!response.ok) {
+    throw new Error(`Failed to load investments: ${response.status}`)
+  }
+  return (await response.json()) as InvestmentState
+}
+
+export async function saveInvestmentStateToDb(state: InvestmentState): Promise<void> {
+  const response = await fetch(`${apiBase}/api/investments`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(state),
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to save investments: ${response.status}`)
   }
 }
