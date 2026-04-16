@@ -291,12 +291,12 @@ body {
 
 .trend-panel {
   grid-column: 1 / -1;
-  min-height: 340px;
+  min-height: 420px;
 }
 
 .trend-chart {
   width: 100%;
-  height: 250px;
+  height: 340px;
   display: block;
   background: #fbfcfa;
   border: 1px solid var(--line);
@@ -329,8 +329,14 @@ body {
 
 .chart-label {
   fill: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
+}
+
+.chart-x-focus-label {
+  fill: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .chart-area {

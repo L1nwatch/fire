@@ -45,14 +45,24 @@ const selectedTotal = computed(() => snapshotTotal(selectedSnapshot.value))
 const chartPoints = computed(() => trendPoints(investments.value))
 const chartModel = computed(() => {
   const points = chartPoints.value
-  const width = 760
-  const height = 260
-  const pad = { top: 22, right: 22, bottom: 34, left: 54 }
+  const width = 1100
+  const height = 340
+  const pad = { top: 22, right: 28, bottom: 58, left: 72 }
+  const chartLeft = pad.left
+  const chartRight = width - pad.right
+  const chartTop = pad.top
+  const chartBottom = height - pad.bottom
+  const gridLines = Array.from({ length: 5 }, (_, index) => chartTop + (index / 4) * (chartBottom - chartTop))
 
   if (!points.length) {
     return {
       width,
       height,
+      chartLeft,
+      chartRight,
+      chartTop,
+      chartBottom,
+      gridLines,
       linePath: '',
       areaPath: '',
       points: [],
@@ -73,22 +83,27 @@ const chartModel = computed(() => {
   const min = Math.min(...totals)
   const max = Math.max(...totals)
   const range = max - min || 1
-  const innerWidth = width - pad.left - pad.right
-  const innerHeight = height - pad.top - pad.bottom
+  const innerWidth = chartRight - chartLeft
+  const innerHeight = chartBottom - chartTop
   const coords: ChartDisplayPoint[] = normalized.map((point, index) => {
-    const x = pad.left + (normalized.length === 1 ? innerWidth / 2 : (index / (normalized.length - 1)) * innerWidth)
-    const y = pad.top + (1 - (point.displayTotal - min) / range) * innerHeight
+    const x = chartLeft + (normalized.length === 1 ? innerWidth / 2 : (index / (normalized.length - 1)) * innerWidth)
+    const y = chartTop + (1 - (point.displayTotal - min) / range) * innerHeight
     return { ...point, x, y }
   })
   const linePath = coords.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')
   const first = coords[0]!
   const latest = coords[coords.length - 1]!
-  const areaPath = `${linePath} L ${latest.x.toFixed(2)} ${height - pad.bottom} L ${first.x.toFixed(2)} ${height - pad.bottom} Z`
+  const areaPath = `${linePath} L ${latest.x.toFixed(2)} ${chartBottom} L ${first.x.toFixed(2)} ${chartBottom} Z`
   const delta = latest.displayTotal - first.displayTotal
 
   return {
     width,
     height,
+    chartLeft,
+    chartRight,
+    chartTop,
+    chartBottom,
+    gridLines,
     linePath,
     areaPath,
     points: coords,
@@ -227,19 +242,38 @@ function percent(value: number) {
             </linearGradient>
           </defs>
           <g class="chart-grid">
-            <line x1="54" y1="22" x2="738" y2="22" />
-            <line x1="54" y1="73" x2="738" y2="73" />
-            <line x1="54" y1="124" x2="738" y2="124" />
-            <line x1="54" y1="175" x2="738" y2="175" />
-            <line x1="54" y1="226" x2="738" y2="226" />
+            <line
+              v-for="gridY in chartModel.gridLines"
+              :key="gridY"
+              :x1="chartModel.chartLeft"
+              :y1="gridY"
+              :x2="chartModel.chartRight"
+              :y2="gridY"
+            />
           </g>
-          <text x="54" y="17" class="chart-label">{{ formatMoney(chartModel.max, displayCurrency) }}</text>
-          <text x="54" y="247" class="chart-label">{{ formatMoney(chartModel.min, displayCurrency) }}</text>
+          <text :x="chartModel.chartLeft" :y="chartModel.chartTop - 5" class="chart-label">{{ formatMoney(chartModel.max, displayCurrency) }}</text>
+          <text :x="chartModel.chartLeft" :y="chartModel.chartBottom + 20" class="chart-label">{{ formatMoney(chartModel.min, displayCurrency) }}</text>
           <path v-if="chartModel.areaPath" :d="chartModel.areaPath" class="chart-area" />
           <path v-if="chartModel.linePath" :d="chartModel.linePath" class="chart-line" />
-          <line v-if="activeChartPoint" :x1="activeChartPoint.x" y1="22" :x2="activeChartPoint.x" y2="226" class="chart-focus-line" />
+          <line
+            v-if="activeChartPoint"
+            :x1="activeChartPoint.x"
+            :y1="chartModel.chartTop"
+            :x2="activeChartPoint.x"
+            :y2="chartModel.chartBottom"
+            class="chart-focus-line"
+          />
           <circle v-for="point in chartModel.points" :key="point.id" :cx="point.x" :cy="point.y" r="2.6" class="chart-point" />
           <circle v-if="activeChartPoint" :cx="activeChartPoint.x" :cy="activeChartPoint.y" r="5" class="chart-current-dot" />
+          <text
+            v-if="activeChartPoint"
+            :x="activeChartPoint.x"
+            :y="chartModel.chartBottom + 37"
+            class="chart-x-focus-label"
+            text-anchor="middle"
+          >
+            {{ activeChartPoint.date }}
+          </text>
           <circle
             v-for="point in chartModel.points"
             :key="`${point.id}-hit`"
