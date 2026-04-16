@@ -1,6 +1,6 @@
 # Fire
 
-Fire is a local-first portfolio sheet for monitoring financial independence, cash, and investment positions.
+Fire is a local-first finance workbook for monitoring monthly cash flow, daily spending, assets, liabilities, forecasts, and investment positions.
 
 ## Frontend
 
@@ -25,3 +25,5 @@ Build it:
 cd frontend
 npm run build
 ```
+
+The initialization spreadsheets are intentionally ignored by Git. Use them as private reference data while shaping the local workbook.

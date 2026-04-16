@@ -179,7 +179,7 @@ body {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.8fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -212,13 +212,15 @@ body {
 }
 
 .risk-list,
-.mover-list {
+.mover-list,
+.report-stack {
   display: grid;
   gap: 8px;
 }
 
 .risk-row,
 .mover-row,
+.report-row,
 .sheet-summary {
   display: flex;
   align-items: center;
@@ -251,6 +253,39 @@ body {
 
 .sheet-panel {
   overflow: hidden;
+}
+
+.month-select {
+  width: 160px;
+}
+
+.workbook-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.workbook-layout > .metric-grid,
+.workbook-layout > .month-editor {
+  grid-column: 1 / -1;
+}
+
+.workbook-metrics {
+  margin-bottom: 0;
+}
+
+.month-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.month-fields label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .holdings-table :deep(.el-input-number) {
@@ -294,8 +329,15 @@ body {
   }
 
   .metric-grid,
-  .dashboard-grid {
+  .dashboard-grid,
+  .workbook-layout,
+  .month-fields {
     grid-template-columns: 1fr;
+  }
+
+  .workbook-layout > .metric-grid,
+  .workbook-layout > .month-editor {
+    grid-column: auto;
   }
 
   .page-head {

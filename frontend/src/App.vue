@@ -5,7 +5,10 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 
 const activePath = computed(() => {
+  if (route.path.startsWith('/monthly')) return '/monthly'
+  if (route.path.startsWith('/ledger')) return '/ledger'
   if (route.path.startsWith('/holdings')) return '/holdings'
+  if (route.path.startsWith('/forecast')) return '/forecast'
   return '/dashboard'
 })
 </script>
@@ -19,7 +22,10 @@ const activePath = computed(() => {
       </div>
       <el-menu :default-active="activePath" router class="menu">
         <el-menu-item index="/dashboard">Dashboard</el-menu-item>
-        <el-menu-item index="/holdings">Holdings Sheet</el-menu-item>
+        <el-menu-item index="/monthly">Monthly Report</el-menu-item>
+        <el-menu-item index="/ledger">Daily Ledger</el-menu-item>
+        <el-menu-item index="/holdings">Investments</el-menu-item>
+        <el-menu-item index="/forecast">Forecast</el-menu-item>
       </el-menu>
     </aside>
 

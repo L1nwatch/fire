@@ -51,8 +51,8 @@ function percent(value: number) {
     <div class="page-head">
       <div>
         <p class="eyebrow">Sheet</p>
-        <h1>Holdings</h1>
-        <p>Update quantities, cost, live price snapshots, target weights, and notes.</p>
+        <h1>Investments</h1>
+        <p>Update investment balances, asset class, cost basis, target weights, and notes.</p>
       </div>
       <div class="actions">
         <el-button @click="restoreSampleData">Reset Sample</el-button>

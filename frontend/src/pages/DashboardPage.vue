@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { emptyMonth, summarizeMonth } from '../lib/finance'
 import { allocationByAssetClass, summarizePortfolio, type RiskLevel } from '../lib/portfolio'
-import { loadHoldings } from '../lib/storage'
+import { loadFinanceState, loadHoldings } from '../lib/storage'
 
 const holdings = ref(loadHoldings())
-const summary = computed(() => summarizePortfolio(holdings.value))
+const finance = ref(loadFinanceState())
+const currentMonth = computed(() => finance.value.months[0] ?? emptyMonth())
+const financeSummary = computed(() => summarizeMonth(currentMonth.value))
+const portfolioSummary = computed(() => summarizePortfolio(holdings.value))
 const allocation = computed(() => allocationByAssetClass(holdings.value))
 const riskCounts = computed(() => {
   return holdings.value.reduce<Record<RiskLevel, number>>(
@@ -38,33 +42,60 @@ function percent(value: number) {
       <div>
         <p class="eyebrow">Portfolio Monitor</p>
         <h1>Financial position</h1>
-        <p>Track allocation, cash, cost basis, and investment drift from one sheet.</p>
+        <p>Monthly report, daily spending, asset balances, liabilities, and investments in one workspace.</p>
       </div>
-      <el-button type="primary" tag="router-link" to="/holdings">Update Holdings</el-button>
+      <el-button type="primary" tag="router-link" to="/monthly">Update Month</el-button>
     </div>
 
     <div class="metric-grid">
       <article class="metric-card">
-        <span>Total Value</span>
-        <strong>{{ money(summary.marketValue) }}</strong>
-        <small>{{ money(summary.investedValue) }} invested</small>
+        <span>Net Worth</span>
+        <strong>{{ money(financeSummary.netWorth) }}</strong>
+        <small>{{ money(financeSummary.totalAssets) }} assets</small>
       </article>
       <article class="metric-card">
-        <span>Gain / Loss</span>
-        <strong :class="{ positive: summary.gainLoss >= 0, negative: summary.gainLoss < 0 }">{{ money(summary.gainLoss) }}</strong>
-        <small>{{ percent(summary.gainLossPercent) }} total return</small>
+        <span>Monthly Cash Flow</span>
+        <strong :class="{ positive: financeSummary.monthlyCashFlow >= 0, negative: financeSummary.monthlyCashFlow < 0 }">
+          {{ money(financeSummary.monthlyCashFlow) }}
+        </strong>
+        <small>{{ percent(financeSummary.savingsRate) }} savings rate</small>
       </article>
       <article class="metric-card">
-        <span>Cost Basis</span>
-        <strong>{{ money(summary.costBasis) }}</strong>
-        <small>{{ money(summary.cashBalance) }} cash</small>
+        <span>Investment Value</span>
+        <strong>{{ money(portfolioSummary.marketValue) }}</strong>
+        <small>{{ money(portfolioSummary.gainLoss) }} gain / loss</small>
       </article>
     </div>
 
     <div class="dashboard-grid">
       <section class="panel">
         <div class="section-head">
-          <h2>Allocation</h2>
+          <h2>{{ currentMonth.label }} Report</h2>
+          <span>{{ currentMonth.currency }}</span>
+        </div>
+        <div class="report-stack">
+          <div class="report-row">
+            <span>Total income</span>
+            <strong>{{ money(financeSummary.totalIncome) }}</strong>
+          </div>
+          <div class="report-row">
+            <span>Total spending</span>
+            <strong class="negative">{{ money(financeSummary.totalExpenses) }}</strong>
+          </div>
+          <div class="report-row">
+            <span>Passive income</span>
+            <strong>{{ money(financeSummary.passiveIncome) }}</strong>
+          </div>
+          <div class="report-row">
+            <span>Liabilities</span>
+            <strong class="negative">{{ money(financeSummary.totalLiabilities) }}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <h2>Investment Allocation</h2>
           <span>Target drift</span>
         </div>
         <el-table :data="allocation" size="large" class="data-table">
