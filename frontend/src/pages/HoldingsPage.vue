@@ -52,9 +52,12 @@ const chartModel = computed(() => {
   const chartRight = width - pad.right
   const chartTop = pad.top
   const chartBottom = height - pad.bottom
-  const gridLines = Array.from({ length: 5 }, (_, index) => chartTop + (index / 4) * (chartBottom - chartTop))
 
   if (!points.length) {
+    const yTicks = Array.from({ length: 5 }, (_, index) => ({
+      y: chartTop + (index / 4) * (chartBottom - chartTop),
+      value: 0,
+    }))
     return {
       width,
       height,
@@ -62,7 +65,7 @@ const chartModel = computed(() => {
       chartRight,
       chartTop,
       chartBottom,
-      gridLines,
+      yTicks,
       linePath: '',
       areaPath: '',
       points: [],
@@ -83,6 +86,13 @@ const chartModel = computed(() => {
   const min = Math.min(...totals)
   const max = Math.max(...totals)
   const range = max - min || 1
+  const yTicks = Array.from({ length: 5 }, (_, index) => {
+    const ratio = index / 4
+    return {
+      y: chartTop + ratio * (chartBottom - chartTop),
+      value: max - ratio * range,
+    }
+  })
   const innerWidth = chartRight - chartLeft
   const innerHeight = chartBottom - chartTop
   const coords: ChartDisplayPoint[] = normalized.map((point, index) => {
@@ -103,7 +113,7 @@ const chartModel = computed(() => {
     chartRight,
     chartTop,
     chartBottom,
-    gridLines,
+    yTicks,
     linePath,
     areaPath,
     points: coords,
@@ -234,7 +244,14 @@ function percent(value: number) {
             <span>{{ percent(chartModel.deltaPercent) }}</span>
           </div>
         </div>
-        <svg class="trend-chart" :viewBox="`0 0 ${chartModel.width} ${chartModel.height}`" role="img" aria-label="Investment total trend" @mouseleave="clearChartPoint">
+        <svg
+          class="trend-chart"
+          :viewBox="`0 0 ${chartModel.width} ${chartModel.height}`"
+          preserveAspectRatio="none"
+          role="img"
+          aria-label="Investment total trend"
+          @mouseleave="clearChartPoint"
+        >
           <defs>
             <linearGradient id="investmentTrendFill" x1="0" x2="0" y1="0" y2="1">
               <stop offset="0%" stop-color="#1f7a63" stop-opacity="0.28" />
@@ -243,16 +260,25 @@ function percent(value: number) {
           </defs>
           <g class="chart-grid">
             <line
-              v-for="gridY in chartModel.gridLines"
-              :key="gridY"
+              v-for="tick in chartModel.yTicks"
+              :key="tick.y"
               :x1="chartModel.chartLeft"
-              :y1="gridY"
+              :y1="tick.y"
               :x2="chartModel.chartRight"
-              :y2="gridY"
+              :y2="tick.y"
             />
           </g>
-          <text :x="chartModel.chartLeft" :y="chartModel.chartTop - 5" class="chart-label">{{ formatMoney(chartModel.max, displayCurrency) }}</text>
-          <text :x="chartModel.chartLeft" :y="chartModel.chartBottom + 20" class="chart-label">{{ formatMoney(chartModel.min, displayCurrency) }}</text>
+          <g class="chart-y-axis">
+            <text
+              v-for="tick in chartModel.yTicks"
+              :key="`${tick.y}-label`"
+              :x="chartModel.chartLeft + 8"
+              :y="tick.y - 6"
+              class="chart-label"
+            >
+              {{ formatMoney(tick.value, displayCurrency) }}
+            </text>
+          </g>
           <path v-if="chartModel.areaPath" :d="chartModel.areaPath" class="chart-area" />
           <path v-if="chartModel.linePath" :d="chartModel.linePath" class="chart-line" />
           <line
