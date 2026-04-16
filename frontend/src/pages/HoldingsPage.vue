@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import { fetchInvestmentState, saveInvestmentStateToDb } from '../lib/api'
-import { formatMoney } from '../lib/currency'
+import { convertMoney, displayCurrency, formatMoney, normalizeCurrency } from '../lib/currency'
 import {
   createInvestmentItem,
   createSnapshotFromPrevious,
@@ -32,20 +32,62 @@ const selectedSnapshot = computed<InvestmentSnapshot | undefined>(() => snapshot
 const latestTotal = computed(() => snapshotTotal(latestSnapshot.value))
 const selectedTotal = computed(() => snapshotTotal(selectedSnapshot.value))
 const chartPoints = computed(() => trendPoints(investments.value))
-const chartPolyline = computed(() => {
+const chartModel = computed(() => {
   const points = chartPoints.value
-  if (!points.length) return ''
-  const totals = points.map((point) => point.total)
+  const width = 760
+  const height = 260
+  const pad = { top: 22, right: 22, bottom: 34, left: 54 }
+
+  if (!points.length) {
+    return {
+      width,
+      height,
+      linePath: '',
+      areaPath: '',
+      points: [],
+      min: 0,
+      max: 0,
+      first: undefined,
+      latest: undefined,
+      delta: 0,
+      deltaPercent: 0,
+    }
+  }
+
+  const normalized = points.map((point) => ({
+    ...point,
+    displayTotal: convertMoney(point.total, normalizeCurrency(point.currency), displayCurrency.value),
+  }))
+  const totals = normalized.map((point) => point.displayTotal)
   const min = Math.min(...totals)
   const max = Math.max(...totals)
   const range = max - min || 1
-  return points
-    .map((point, index) => {
-      const x = points.length === 1 ? 50 : (index / (points.length - 1)) * 100
-      const y = 90 - ((point.total - min) / range) * 75
-      return `${x},${y}`
-    })
-    .join(' ')
+  const innerWidth = width - pad.left - pad.right
+  const innerHeight = height - pad.top - pad.bottom
+  const coords = normalized.map((point, index) => {
+    const x = pad.left + (normalized.length === 1 ? innerWidth / 2 : (index / (normalized.length - 1)) * innerWidth)
+    const y = pad.top + (1 - (point.displayTotal - min) / range) * innerHeight
+    return { ...point, x, y }
+  })
+  const linePath = coords.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')
+  const first = coords[0]!
+  const latest = coords[coords.length - 1]!
+  const areaPath = `${linePath} L ${latest.x.toFixed(2)} ${height - pad.bottom} L ${first.x.toFixed(2)} ${height - pad.bottom} Z`
+  const delta = latest.displayTotal - first.displayTotal
+
+  return {
+    width,
+    height,
+    linePath,
+    areaPath,
+    points: coords,
+    min,
+    max,
+    first,
+    latest,
+    delta,
+    deltaPercent: first.displayTotal ? (delta / first.displayTotal) * 100 : 0,
+  }
 })
 
 watch(
@@ -120,6 +162,10 @@ function removeItem(id: string) {
   if (!selectedSnapshot.value) return
   selectedSnapshot.value.items = selectedSnapshot.value.items.filter((item) => item.id !== id)
 }
+
+function percent(value: number) {
+  return `${value.toFixed(1)}%`
+}
 </script>
 
 <template>
@@ -141,25 +187,40 @@ function removeItem(id: string) {
     <div class="investment-grid">
       <section class="panel trend-panel">
         <div class="section-head">
-          <h2>Trend</h2>
-          <span>{{ chartPoints.length }} snapshots</span>
+          <div>
+            <h2>Investment Trend</h2>
+            <span class="section-subtitle">{{ chartPoints.length }} snapshots</span>
+          </div>
+          <div class="trend-stat" :class="{ positive: chartModel.delta >= 0, negative: chartModel.delta < 0 }">
+            <strong>{{ formatMoney(chartModel.delta, displayCurrency) }}</strong>
+            <span>{{ percent(chartModel.deltaPercent) }}</span>
+          </div>
         </div>
-        <svg class="trend-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Investment total trend">
-          <line x1="0" y1="90" x2="100" y2="90" class="chart-axis" />
-          <polyline v-if="chartPolyline" :points="chartPolyline" class="chart-line" />
-          <circle
-            v-for="point in chartPoints"
-            :key="point.id"
-            :cx="chartPoints.length === 1 ? 50 : (chartPoints.indexOf(point) / (chartPoints.length - 1)) * 100"
-            :cy="90 - ((point.total - Math.min(...chartPoints.map((p) => p.total))) / (Math.max(...chartPoints.map((p) => p.total)) - Math.min(...chartPoints.map((p) => p.total)) || 1)) * 75"
-            r="1.6"
-            class="chart-point"
-          />
+        <svg class="trend-chart" :viewBox="`0 0 ${chartModel.width} ${chartModel.height}`" role="img" aria-label="Investment total trend">
+          <defs>
+            <linearGradient id="investmentTrendFill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#1f7a63" stop-opacity="0.28" />
+              <stop offset="100%" stop-color="#1f7a63" stop-opacity="0.02" />
+            </linearGradient>
+          </defs>
+          <g class="chart-grid">
+            <line x1="54" y1="22" x2="738" y2="22" />
+            <line x1="54" y1="73" x2="738" y2="73" />
+            <line x1="54" y1="124" x2="738" y2="124" />
+            <line x1="54" y1="175" x2="738" y2="175" />
+            <line x1="54" y1="226" x2="738" y2="226" />
+          </g>
+          <text x="54" y="17" class="chart-label">{{ formatMoney(chartModel.max, displayCurrency) }}</text>
+          <text x="54" y="247" class="chart-label">{{ formatMoney(chartModel.min, displayCurrency) }}</text>
+          <path v-if="chartModel.areaPath" :d="chartModel.areaPath" class="chart-area" />
+          <path v-if="chartModel.linePath" :d="chartModel.linePath" class="chart-line" />
+          <circle v-for="point in chartModel.points" :key="point.id" :cx="point.x" :cy="point.y" r="2.6" class="chart-point" />
+          <circle v-if="chartModel.latest" :cx="chartModel.latest.x" :cy="chartModel.latest.y" r="5" class="chart-current-dot" />
         </svg>
         <div class="trend-labels">
-          <span>{{ chartPoints[0]?.date ?? 'No data' }}</span>
-          <strong>{{ latestSnapshot ? formatMoney(latestTotal, latestSnapshot.currency) : formatMoney(0, 'CAD') }}</strong>
-          <span>{{ chartPoints[chartPoints.length - 1]?.date ?? '' }}</span>
+          <span>{{ chartModel.first?.date ?? 'No data' }}</span>
+          <strong>{{ chartModel.latest ? formatMoney(chartModel.latest.displayTotal, displayCurrency) : formatMoney(0, displayCurrency) }}</strong>
+          <span>{{ chartModel.latest?.date ?? '' }}</span>
         </div>
       </section>
 

@@ -290,32 +290,72 @@ body {
 }
 
 .trend-panel {
-  min-height: 280px;
+  min-height: 340px;
 }
 
 .trend-chart {
   width: 100%;
-  height: 190px;
+  height: 250px;
   display: block;
-  background: #f7faf8;
+  background: #fbfcfa;
   border: 1px solid var(--line);
   border-radius: 8px;
 }
 
-.chart-axis {
-  stroke: #c7d2cc;
-  stroke-width: 0.5;
+.section-subtitle {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.trend-stat {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.trend-stat strong {
+  font-size: 18px;
+}
+
+.chart-grid line {
+  stroke: #dce4df;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-label {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chart-area {
+  fill: url('#investmentTrendFill');
 }
 
 .chart-line {
   fill: none;
   stroke: var(--accent);
-  stroke-width: 2.2;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
 
 .chart-point {
+  fill: #fbfcfa;
+  stroke: var(--accent-strong);
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-current-dot {
   fill: var(--accent-strong);
+  stroke: #ffffff;
+  stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
 
