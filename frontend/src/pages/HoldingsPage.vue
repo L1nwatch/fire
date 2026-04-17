@@ -242,23 +242,23 @@ function percent(value: number) {
   <section class="page-shell wide">
     <div class="page-head">
       <div>
-        <p class="eyebrow">Investments</p>
+        <p class="eyebrow">Assets</p>
         <h1>Manual asset snapshots</h1>
-        <p>Record all investment assets on a date, copy the last snapshot forward, and track the trend.</p>
+        <p>Record all assets on a date, copy the last snapshot forward, and track the trend.</p>
       </div>
       <div class="actions">
         <el-button @click="loadInvestments">Reload DB</el-button>
-        <el-button type="primary" :icon="Plus" @click="addSnapshot">New From Latest</el-button>
+        <el-button type="primary" :icon="Plus" @click="addSnapshot">New Asset Snapshot</el-button>
       </div>
     </div>
 
     <el-alert v-if="saveError" :title="saveError" type="warning" show-icon :closable="false" class="page-alert" />
 
-    <div class="investment-grid">
+    <div class="asset-overview">
       <section class="panel trend-panel">
         <div class="section-head">
           <div>
-            <h2>Investment Trend</h2>
+            <h2>Asset Trend</h2>
             <span class="section-subtitle">
               {{ activeChartPoint?.date ?? chartStats.latest?.date ?? 'No data' }}
               <template v-if="activeChartPoint"> / {{ formatMoney(activeChartPoint.displayTotal, displayCurrency) }}</template>
@@ -275,23 +275,21 @@ function percent(value: number) {
           <strong>{{ activeChartPoint ? formatMoney(activeChartPoint.displayTotal, displayCurrency) : formatMoney(0, displayCurrency) }}</strong>
           <span>{{ chartStats.latest?.date ?? '' }}</span>
         </div>
-      </section>
 
-      <section class="panel">
-        <div class="section-head">
-          <h2>Latest Summary</h2>
-          <span>{{ latestSnapshot?.date ?? '' }}</span>
-        </div>
-        <div class="report-stack" v-if="latestSnapshot">
-          <div class="report-row">
-            <span>Total assets</span>
+        <div class="asset-summary-strip" v-if="latestSnapshot">
+          <div class="asset-summary-item primary">
+            <span>Latest total</span>
             <strong>{{ formatMoney(latestTotal, latestSnapshot.currency) }}</strong>
           </div>
-          <div class="report-row">
-            <span>Rows</span>
+          <div class="asset-summary-item">
+            <span>Snapshot date</span>
+            <strong>{{ latestSnapshot.date }}</strong>
+          </div>
+          <div class="asset-summary-item">
+            <span>Asset rows</span>
             <strong>{{ latestSnapshot.items.length }}</strong>
           </div>
-          <div class="report-row">
+          <div class="asset-summary-item">
             <span>Currency</span>
             <strong>{{ latestSnapshot.currency }}</strong>
           </div>
