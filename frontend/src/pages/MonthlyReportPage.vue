@@ -398,6 +398,13 @@ function clampSavingsRate(value: number) {
             </strong>
           </template>
         </el-table-column>
+        <el-table-column label="Savings Rate" min-width="130" align="right">
+          <template #default="{ row }">
+            <strong :class="{ positive: summarizeMonth(row).savingsRate >= 0, negative: summarizeMonth(row).savingsRate < 0 }">
+              {{ percent(summarizeMonth(row).savingsRate) }}
+            </strong>
+          </template>
+        </el-table-column>
         <el-table-column label="" width="100" fixed="right" align="center">
           <template #default="{ row }">
             <el-button @click.stop="editMonth(row.id)">Edit</el-button>
