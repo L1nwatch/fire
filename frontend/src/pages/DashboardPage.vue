@@ -1,20 +1,40 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { fetchFinanceState } from '../lib/api'
-import { formatMoney } from '../lib/currency'
+import { fetchFinanceState, fetchInvestmentState } from '../lib/api'
+import { displayCurrency, formatMoney } from '../lib/currency'
 import { emptyMonth, sampleFinanceState, summarizeMonth } from '../lib/finance'
-import { allocationByAssetClass, summarizePortfolio } from '../lib/portfolio'
-import { loadHoldings } from '../lib/storage'
+import {
+  emptyInvestmentState,
+  normalizeInvestmentCategory,
+  snapshotTotal,
+  snapshotTotalByCategory,
+  sortedSnapshots,
+  type InvestmentItem,
+} from '../lib/investments'
 
-const holdings = ref(loadHoldings())
 const finance = ref(sampleFinanceState)
+const investments = ref(emptyInvestmentState())
 const loadError = ref('')
 const currentMonth = computed(() => finance.value.months[0] ?? emptyMonth())
 const financeSummary = computed(() => summarizeMonth(currentMonth.value))
-const portfolioSummary = computed(() => summarizePortfolio(holdings.value))
-const allocation = computed(() => allocationByAssetClass(holdings.value))
+const latestInvestmentSnapshot = computed(() => sortedSnapshots(investments.value)[0])
+const investmentTotal = computed(() => snapshotTotal(latestInvestmentSnapshot.value, displayCurrency.value))
+const investmentAvailable = computed(() => snapshotTotalByCategory(latestInvestmentSnapshot.value, displayCurrency.value, 'available'))
+const investmentLocked = computed(() => snapshotTotalByCategory(latestInvestmentSnapshot.value, displayCurrency.value, 'locked'))
+const allocation = computed(() => {
+  const total = investmentTotal.value
+  return [
+    { label: 'Available', value: investmentAvailable.value },
+    { label: 'Locked', value: investmentLocked.value },
+  ]
+    .filter((row) => row.value > 0 || total > 0)
+    .map((row) => ({
+      ...row,
+      weight: total ? roundPercent((row.value / total) * 100) : 0,
+    }))
+})
 const topAssets = computed(() =>
-  [...currentMonth.value.assets]
+  [...(latestInvestmentSnapshot.value?.items ?? [])]
     .filter((asset) => asset.name || asset.amount)
     .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
     .slice(0, 12),
@@ -22,7 +42,9 @@ const topAssets = computed(() =>
 
 onMounted(async () => {
   try {
-    finance.value = await fetchFinanceState()
+    const [financeState, investmentState] = await Promise.all([fetchFinanceState(), fetchInvestmentState()])
+    finance.value = financeState
+    investments.value = investmentState
     loadError.value = ''
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : 'Failed to load finance database'
@@ -31,6 +53,14 @@ onMounted(async () => {
 
 function percent(value: number) {
   return `${value.toFixed(1)}%`
+}
+
+function roundPercent(value: number) {
+  return Math.round((Number.isFinite(value) ? value : 0) * 10) / 10
+}
+
+function assetCurrency(asset: InvestmentItem) {
+  return asset.currency || latestInvestmentSnapshot.value?.currency || displayCurrency.value
 }
 </script>
 
@@ -62,8 +92,8 @@ function percent(value: number) {
       </article>
       <article class="metric-card">
         <span>Investment Value</span>
-        <strong>{{ formatMoney(portfolioSummary.marketValue, 'USD') }}</strong>
-        <small>{{ formatMoney(portfolioSummary.gainLoss, 'USD') }} gain / loss</small>
+        <strong>{{ formatMoney(investmentTotal, displayCurrency) }}</strong>
+        <small>{{ latestInvestmentSnapshot?.date ?? 'No asset snapshot' }}</small>
       </article>
     </div>
 
@@ -96,23 +126,15 @@ function percent(value: number) {
       <section class="panel">
         <div class="section-head">
           <h2>Investment Allocation</h2>
-          <span>Target drift</span>
+          <span>{{ displayCurrency }}</span>
         </div>
         <el-table :data="allocation" size="large" class="data-table">
-          <el-table-column prop="label" label="Asset" min-width="120" />
+          <el-table-column prop="label" label="Category" min-width="120" />
           <el-table-column label="Value" min-width="130" align="right">
-            <template #default="{ row }">{{ formatMoney(row.value, 'USD') }}</template>
+            <template #default="{ row }">{{ formatMoney(row.value, displayCurrency) }}</template>
           </el-table-column>
           <el-table-column label="Weight" min-width="110" align="right">
             <template #default="{ row }">{{ percent(row.weight) }}</template>
-          </el-table-column>
-          <el-table-column label="Target" min-width="110" align="right">
-            <template #default="{ row }">{{ percent(row.targetWeight) }}</template>
-          </el-table-column>
-          <el-table-column label="Drift" min-width="110" align="right">
-            <template #default="{ row }">
-              <span :class="{ positive: row.drift <= 0, warning: Math.abs(row.drift) > 5 }">{{ percent(row.drift) }}</span>
-            </template>
           </el-table-column>
         </el-table>
       </section>
@@ -120,12 +142,12 @@ function percent(value: number) {
       <section class="panel">
         <div class="section-head">
           <h2>Assets</h2>
-          <span>{{ currentMonth.label }}</span>
+          <span>{{ latestInvestmentSnapshot?.date ?? currentMonth.label }}</span>
         </div>
         <div class="asset-list">
           <div v-for="asset in topAssets" :key="asset.id" class="asset-row">
-            <span>{{ asset.name }}</span>
-            <strong>{{ formatMoney(asset.amount, currentMonth.currency) }}</strong>
+            <span>{{ asset.name }} / {{ normalizeInvestmentCategory(asset.category) }}</span>
+            <strong>{{ formatMoney(asset.amount, assetCurrency(asset)) }}</strong>
           </div>
         </div>
       </section>
