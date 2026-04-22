@@ -209,6 +209,10 @@ body {
   min-width: 0;
 }
 
+.assets-panel {
+  grid-column: 1 / -1;
+}
+
 .section-head {
   display: flex;
   justify-content: space-between;
