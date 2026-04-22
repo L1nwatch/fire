@@ -50,10 +50,6 @@ async function reloadFromDb() {
   }
 }
 
-async function resetAll() {
-  await reloadFromDb()
-}
-
 function addItem(section: MoneySection) {
   selectedMonth.value[sectionKey(section)].push(emptyItem())
 }
@@ -88,7 +84,6 @@ function sectionKey(section: MoneySection): MoneyItemKey {
         <el-select v-model="selectedMonthId" class="month-select">
           <el-option v-for="month in finance.months" :key="month.id" :label="month.label" :value="month.id" />
         </el-select>
-        <el-button @click="resetAll">Reload DB</el-button>
         <el-button type="primary" :icon="Plus" @click="addMonth">Add Month</el-button>
       </div>
     </div>
