@@ -232,6 +232,32 @@ body {
   width: 100%;
 }
 
+.asset-groups {
+  display: grid;
+  gap: 14px;
+}
+
+.asset-group {
+  display: grid;
+  gap: 8px;
+}
+
+.asset-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.asset-group-head strong {
+  color: var(--accent-strong);
+  font-size: 14px;
+}
+
 .risk-list,
 .mover-list,
 .asset-list,
@@ -253,6 +279,11 @@ body {
   border-radius: 8px;
   padding: 10px 12px;
   background: #fbfcfa;
+}
+
+.asset-row.empty {
+  color: var(--muted);
+  background: #f7f8f7;
 }
 
 .risk-row.low {

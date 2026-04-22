@@ -33,12 +33,26 @@ const allocation = computed(() => {
       weight: total ? roundPercent((row.value / total) * 100) : 0,
     }))
 })
-const topAssets = computed(() =>
-  [...(latestInvestmentSnapshot.value?.items ?? [])]
+const assetGroups = computed(() => {
+  const assets = [...(latestInvestmentSnapshot.value?.items ?? [])]
     .filter((asset) => asset.name || asset.amount)
     .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
-    .slice(0, 12),
-)
+
+  return [
+    {
+      key: 'available',
+      label: 'Available',
+      total: investmentAvailable.value,
+      items: assets.filter((asset) => normalizeInvestmentCategory(asset.category) === 'Available').slice(0, 8),
+    },
+    {
+      key: 'locked',
+      label: 'Locked',
+      total: investmentLocked.value,
+      items: assets.filter((asset) => normalizeInvestmentCategory(asset.category) === 'Locked').slice(0, 8),
+    },
+  ]
+})
 
 onMounted(async () => {
   try {
@@ -144,10 +158,22 @@ function assetCurrency(asset: InvestmentItem) {
           <h2>Assets</h2>
           <span>{{ latestInvestmentSnapshot?.date ?? currentMonth.label }}</span>
         </div>
-        <div class="asset-list">
-          <div v-for="asset in topAssets" :key="asset.id" class="asset-row">
-            <span>{{ asset.name }} / {{ normalizeInvestmentCategory(asset.category) }}</span>
-            <strong>{{ formatMoney(asset.amount, assetCurrency(asset)) }}</strong>
+        <div class="asset-groups">
+          <div v-for="group in assetGroups" :key="group.key" class="asset-group">
+            <div class="asset-group-head">
+              <span>{{ group.label }}</span>
+              <strong>{{ formatMoney(group.total, displayCurrency) }}</strong>
+            </div>
+            <div class="asset-list">
+              <div v-for="asset in group.items" :key="asset.id" class="asset-row">
+                <span>{{ asset.name }}</span>
+                <strong>{{ formatMoney(asset.amount, assetCurrency(asset)) }}</strong>
+              </div>
+              <div v-if="!group.items.length" class="asset-row empty">
+                <span>No records</span>
+                <strong>{{ formatMoney(0, displayCurrency) }}</strong>
+              </div>
+            </div>
           </div>
         </div>
       </section>
