@@ -27,7 +27,6 @@ interface MonthTrendPoint {
   income: number
   spending: number
   cashFlow: number
-  netWorth: number
 }
 
 const months = computed(() => [...finance.value.months].sort((a, b) => b.label.localeCompare(a.label)))
@@ -51,7 +50,6 @@ const chartPoints = computed<MonthTrendPoint[]>(() =>
         income: summary.totalIncome,
         spending: Math.abs(summary.totalExpenses),
         cashFlow: summary.monthlyCashFlow,
-        netWorth: summary.netWorth,
       }
     }),
 )
@@ -192,7 +190,7 @@ function renderChart() {
       top: 0,
       right: 8,
       textStyle: { color: '#68716d', fontWeight: 700 },
-      data: ['Income', 'Spending', 'Net Worth'],
+      data: ['Income', 'Spending'],
     },
     tooltip: {
       trigger: 'axis',
@@ -209,7 +207,7 @@ function renderChart() {
           `<strong>${point.label}</strong>`,
           `Income: ${formatMoney(point.income, point.currency)}`,
           `Spending: ${formatMoney(point.spending, point.currency)}`,
-          `Net Worth: ${formatMoney(point.netWorth, point.currency)}`,
+          `Cash Flow: ${formatMoney(point.cashFlow, point.currency)}`,
         ].join('<br/>')
       },
     },
@@ -236,7 +234,6 @@ function renderChart() {
     series: [
       monthSeries('Income', points.map((point) => point.income), '#1f7a63'),
       monthSeries('Spending', points.map((point) => point.spending), '#d97432'),
-      monthSeries('Net Worth', points.map((point) => point.netWorth), '#2f6f9f'),
     ],
   }
   chart.setOption(option, true)
@@ -303,10 +300,6 @@ function percent(value: number) {
 
       <div class="asset-summary-strip monthly-summary-strip" v-if="latestMonth">
         <div class="asset-summary-item primary">
-          <span>Latest Net Worth</span>
-          <strong>{{ formatMoney(latestSummary.netWorth, latestMonth.currency) }}</strong>
-        </div>
-        <div class="asset-summary-item">
           <span>Total Income</span>
           <strong>{{ formatMoney(latestSummary.totalIncome, latestMonth.currency) }}</strong>
         </div>
@@ -353,9 +346,6 @@ function percent(value: number) {
             </strong>
           </template>
         </el-table-column>
-        <el-table-column label="Net Worth" min-width="160" align="right">
-          <template #default="{ row }">{{ formatMoney(summarizeMonth(row).netWorth, row.currency) }}</template>
-        </el-table-column>
         <el-table-column label="" width="100" fixed="right" align="center">
           <template #default="{ row }">
             <el-button @click.stop="editMonth(row.id)">Edit</el-button>
@@ -386,7 +376,7 @@ function percent(value: number) {
             <span>Monthly Report Editor</span>
             <strong>{{ selectedMonth.label }}</strong>
           </div>
-          <span>{{ formatMoney(selectedSummary.netWorth, selectedMonth.currency) }}</span>
+          <span>{{ formatMoney(selectedSummary.monthlyCashFlow, selectedMonth.currency) }}</span>
         </div>
       </template>
 
