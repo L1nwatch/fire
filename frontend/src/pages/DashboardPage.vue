@@ -117,7 +117,7 @@ function assetCurrency(asset: InvestmentItem) {
     </div>
 
     <div class="dashboard-grid">
-      <section class="panel assets-panel">
+      <section class="panel">
         <div class="section-head">
           <h2>{{ currentMonth.label }} Report</h2>
           <span>{{ currentMonth.currency }}</span>
@@ -142,7 +142,7 @@ function assetCurrency(asset: InvestmentItem) {
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel assets-panel">
         <div class="section-head">
           <h2>Investment Allocation</h2>
           <span>{{ displayCurrency }}</span>
