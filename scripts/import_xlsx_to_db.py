@@ -98,6 +98,8 @@ def import_report_sheet(conn: sqlite3.Connection, workbook: str, sheet: str, row
             amount = numeric(row_value(row, amount_col))
             if not name and amount == 0:
                 continue
+            if is_report_summary_row(name):
+                continue
             conn.execute(
                 """
                 INSERT INTO money_items
@@ -117,6 +119,10 @@ def import_report_sheet(conn: sqlite3.Connection, workbook: str, sheet: str, row
             position += 1
 
     import_investment_snapshot_from_assets(conn, workbook, sheet, month_label, rows)
+
+
+def is_report_summary_row(name: str) -> bool:
+    return name.strip() in {"总收入", "总支出", "每月现金流", "总资产", "总负债", "净资产", "结余"}
 
 
 def import_investment_snapshot_from_assets(conn: sqlite3.Connection, workbook: str, sheet: str, month_label: str, rows: list[list[Any]]) -> None:
