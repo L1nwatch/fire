@@ -246,6 +246,16 @@ body {
   background: linear-gradient(180deg, #ffffff, #fbfcfa);
 }
 
+.asset-group.available {
+  border-color: #a8d8c5;
+  background: linear-gradient(135deg, #e4f7ef, #fbfffd);
+}
+
+.asset-group.locked {
+  border-color: #e4cc8f;
+  background: linear-gradient(135deg, #fff4d9, #fffdf7);
+}
+
 .asset-group-head {
   display: flex;
   align-items: center;
@@ -276,20 +286,8 @@ body {
   text-align: right;
 }
 
-.asset-breakdown {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.asset-breakdown span {
-  border: 1px solid #d7e4df;
-  border-radius: 999px;
-  padding: 4px 8px;
-  background: #f7fbf9;
-  color: #38516f;
-  font-size: 12px;
-  font-weight: 700;
+.asset-group.locked .asset-group-head strong {
+  color: #9a6417;
 }
 
 .risk-list,
@@ -323,19 +321,6 @@ body {
 .asset-row.more {
   color: var(--muted);
   background: #f7fbf9;
-}
-
-.asset-row strong {
-  display: grid;
-  justify-items: end;
-  gap: 2px;
-  line-height: 1.15;
-}
-
-.asset-row strong small {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
 }
 
 .risk-row.low {
