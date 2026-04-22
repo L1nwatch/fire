@@ -191,6 +191,9 @@ function renderChart() {
   if (!chart) return
   syncActiveChartPoint()
   const points = chartPoints.value
+  const maxMoneyValue = Math.max(0, ...points.map((point) => Math.max(point.income, point.spending)))
+  const moneyAxisMax = maxMoneyValue > 0 ? maxMoneyValue * 1.2 : 1
+  const moneyAxisCurrency = latestMonth.value?.currency ?? 'CNY'
   const option: EChartsOption = {
     animationDuration: 450,
     color: ['#1f7a63', '#d97432', '#2f6f9f'],
@@ -232,13 +235,13 @@ function renderChart() {
     yAxis: [
       {
         type: 'value',
-        scale: true,
-        min: savingsRateChartMin,
-        max: savingsRateChartMax,
+        scale: false,
+        min: 0,
+        max: moneyAxisMax,
         splitNumber: 5,
         axisLabel: {
           color: '#68716d',
-          formatter: (value: number) => formatMoney(value, activeChartPoint.value?.currency ?? latestMonth.value?.currency ?? 'CNY'),
+          formatter: (value: number) => formatMoney(value, moneyAxisCurrency),
         },
         axisLine: { show: false },
         axisTick: { show: false },
@@ -247,6 +250,8 @@ function renderChart() {
       {
         type: 'value',
         scale: true,
+        min: savingsRateChartMin,
+        max: savingsRateChartMax,
         splitNumber: 5,
         axisLabel: {
           color: '#2f6f9f',
