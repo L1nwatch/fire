@@ -2,5 +2,6 @@
 财务报表.xlsx
 data/*.sqlite3
 data/*.sqlite3-*
+.logs/
 __pycache__/
 *.pyc

@@ -11,9 +11,9 @@ const cnyPerUnit: Record<CurrencyCode, number> = {
 }
 
 const savedCurrency = localStorage.getItem(storageKey)
-export const displayCurrency = ref<CurrencyCode>(savedCurrency === 'CAD' || savedCurrency === 'CNY' ? savedCurrency : 'CNY')
+export const displayCurrency = ref<CurrencyCode>(savedCurrency === 'CAD' || savedCurrency === 'USD' || savedCurrency === 'CNY' ? savedCurrency : 'CNY')
 
-export const currencyOptions: CurrencyCode[] = ['CNY', 'CAD']
+export const currencyOptions: CurrencyCode[] = ['CNY', 'CAD', 'USD']
 
 export const currencyHint = computed(() => {
   if (displayCurrency.value === 'CAD') return 'Display converted to CAD'

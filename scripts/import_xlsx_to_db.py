@@ -120,6 +120,17 @@ def import_report_sheet(conn: sqlite3.Connection, workbook: str, sheet: str, row
 
 
 def import_investment_snapshot_from_assets(conn: sqlite3.Connection, workbook: str, sheet: str, month_label: str, rows: list[list[Any]]) -> None:
+    asset_rows = []
+    for row_index, row in enumerate(rows[1:], start=2):
+        name = text_at(row, 4)
+        amount = numeric(row_value(row, 5))
+        if not name and amount == 0:
+            continue
+        asset_rows.append((row_index, name, amount))
+
+    if asset_rows and all(amount == 0 for _, _, amount in asset_rows):
+        return
+
     snapshot_id = stable_id("investment", workbook, sheet)
     conn.execute(
         """
@@ -129,17 +140,12 @@ def import_investment_snapshot_from_assets(conn: sqlite3.Connection, workbook: s
         (snapshot_id, month_end_date(month_label), "CNY", f"Imported from {workbook} / {sheet} asset columns"),
     )
 
-    position = 0
-    for row_index, row in enumerate(rows[1:], start=2):
-        name = text_at(row, 4)
-        amount = numeric(row_value(row, 5))
-        if not name and amount == 0:
-            continue
+    for position, (row_index, name, amount) in enumerate(asset_rows):
         conn.execute(
             """
             INSERT INTO investment_items
-              (id, snapshot_id, name, account, category, amount, notes, position)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              (id, snapshot_id, name, account, category, amount, currency, notes, position)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 stable_id("investment-item", workbook, sheet, row_index, name),
@@ -148,11 +154,11 @@ def import_investment_snapshot_from_assets(conn: sqlite3.Connection, workbook: s
                 "",
                 classify_asset(name),
                 amount,
+                "CNY",
                 "",
                 position,
             ),
         )
-        position += 1
 
 def import_daily_sheet(conn: sqlite3.Connection, workbook: str, sheet: str, rows: list[list[Any]]) -> None:
     for row_index, row in enumerate(rows[2:], start=3):
@@ -246,13 +252,11 @@ def month_end_date(month_label: str) -> str:
 
 def classify_asset(name: str) -> str:
     value = name.lower()
-    if any(token in value for token in ["证券", "stock", "etf", "tfsa", "rrsp", "ibkr", "ws-"]):
-        return "Investment"
-    if any(token in value for token in ["银行", "cash", "现金", "余额", "零钱"]):
-        return "Cash"
-    if "押金" in value:
-        return "Deposit"
-    return "Asset"
+    if any(token in value for token in ["公积金", "社保", "养老保险", "医疗保险", "pension", "retirement", "年金", "insurance", "押金", "深圳通", "交通卡", "my深联通", "my深移动"]):
+        return "Locked"
+    if any(token in value for token in ["银行", "cash", "现金", "余额", "零钱", "朝朝宝", "理财", "支付宝", "微众", "transit"]):
+        return "Available"
+    return "Available"
 
 
 def summary_value(rows: list[list[Any]], label: str) -> float:

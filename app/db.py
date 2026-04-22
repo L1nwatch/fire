@@ -101,11 +101,33 @@ def init_db(conn: sqlite3.Connection) -> None:
             account TEXT NOT NULL DEFAULT '',
             category TEXT NOT NULL DEFAULT '',
             amount REAL NOT NULL DEFAULT 0,
+            currency TEXT NOT NULL DEFAULT 'CAD',
             notes TEXT NOT NULL DEFAULT '',
             position INTEGER NOT NULL DEFAULT 0
         );
         """
     )
+    investment_item_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(investment_items)").fetchall()
+    }
+    if "currency" not in investment_item_columns:
+        conn.execute("ALTER TABLE investment_items ADD COLUMN currency TEXT NOT NULL DEFAULT 'CAD'")
+        conn.execute(
+            """
+            UPDATE investment_items
+            SET currency = (
+                SELECT investment_snapshots.currency
+                FROM investment_snapshots
+                WHERE investment_snapshots.id = investment_items.snapshot_id
+            )
+            WHERE EXISTS (
+                SELECT 1
+                FROM investment_snapshots
+                WHERE investment_snapshots.id = investment_items.snapshot_id
+            )
+            """
+        )
     conn.commit()
 
 
@@ -308,6 +330,7 @@ def load_investment_state(conn: sqlite3.Connection) -> dict[str, Any]:
                         "account": item["account"],
                         "category": item["category"],
                         "amount": item["amount"],
+                        "currency": item["currency"] or snapshot["currency"],
                         "notes": item["notes"],
                     }
                     for item in items
@@ -337,8 +360,8 @@ def save_investment_state(conn: sqlite3.Connection, state: dict[str, Any]) -> No
             conn.execute(
                 """
                 INSERT INTO investment_items
-                  (id, snapshot_id, name, account, category, amount, notes, position)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                  (id, snapshot_id, name, account, category, amount, currency, notes, position)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     item["id"],
@@ -347,6 +370,7 @@ def save_investment_state(conn: sqlite3.Connection, state: dict[str, Any]) -> No
                     item.get("account", ""),
                     item.get("category", ""),
                     float(item.get("amount") or 0),
+                    item.get("currency") or snapshot.get("currency", "CAD"),
                     item.get("notes", ""),
                     position,
                 ),

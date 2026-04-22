@@ -4,14 +4,16 @@ import { Delete, Plus } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import type { ECharts, EChartsOption } from 'echarts'
 import { fetchInvestmentState, saveInvestmentStateToDb } from '../lib/api'
-import { convertMoney, displayCurrency, formatMoney, normalizeCurrency } from '../lib/currency'
+import { currencyOptions, displayCurrency, formatMoney } from '../lib/currency'
 import {
   createInvestmentItem,
   createSnapshotFromPrevious,
   emptyInvestmentState,
+  investmentCategoryOptions,
   snapshotTotal,
+  snapshotTotalByCategory,
   sortedSnapshots,
-  trendPoints,
+  trendPointsByCategory,
   type InvestmentSnapshot,
   type InvestmentState,
 } from '../lib/investments'
@@ -25,6 +27,7 @@ const chartEl = ref<HTMLDivElement | null>(null)
 const activeChartPoint = ref<{ date: string; displayTotal: number } | null>(null)
 const historyPage = ref(1)
 const historyPageSize = 10
+const totalDisplayMode = ref<'available' | 'locked' | 'all'>('available')
 let chart: ECharts | null = null
 
 const snapshots = computed(() => sortedSnapshots(investments.value))
@@ -34,15 +37,13 @@ const pagedSnapshots = computed(() => {
 })
 const latestSnapshot = computed(() => snapshots.value[0])
 const selectedSnapshot = computed<InvestmentSnapshot | undefined>(() => snapshots.value.find((snapshot) => snapshot.id === selectedSnapshotId.value) ?? latestSnapshot.value)
-const latestTotal = computed(() => snapshotTotal(latestSnapshot.value))
-const selectedTotal = computed(() => snapshotTotal(selectedSnapshot.value))
-const chartPoints = computed(() => trendPoints(investments.value))
-const chartSeries = computed(() =>
-  chartPoints.value.map((point) => ({
-    date: point.date,
-    displayTotal: convertMoney(point.total, normalizeCurrency(point.currency), displayCurrency.value),
-  })),
-)
+const latestAvailableTotal = computed(() => snapshotTotalByCategory(latestSnapshot.value, displayCurrency.value, 'available'))
+const latestLockedTotal = computed(() => snapshotTotalByCategory(latestSnapshot.value, displayCurrency.value, 'locked'))
+const latestTotal = computed(() => snapshotTotal(latestSnapshot.value, displayCurrency.value))
+const latestDisplayedTotal = computed(() => snapshotTotalByCategory(latestSnapshot.value, displayCurrency.value, totalDisplayMode.value))
+const selectedTotal = computed(() => snapshotTotal(selectedSnapshot.value, displayCurrency.value))
+const chartPoints = computed(() => trendPointsByCategory(investments.value, displayCurrency.value, totalDisplayMode.value))
+const chartSeries = computed(() => chartPoints.value.map((point) => ({ date: point.date, displayTotal: point.total })))
 const chartStats = computed(() => {
   const points = chartSeries.value
   const first = points[0]
@@ -91,7 +92,14 @@ onBeforeUnmount(() => {
 })
 
 watch([chartSeries, displayCurrency], () => {
+  syncActiveChartPoint()
   renderChart()
+})
+
+const displayModeLabel = computed(() => {
+  if (totalDisplayMode.value === 'locked') return 'Locked'
+  if (totalDisplayMode.value === 'all') return 'All'
+  return 'Available'
 })
 
 async function loadInvestments() {
@@ -121,6 +129,10 @@ function editSnapshot(id: string) {
   showEditor.value = true
 }
 
+function editSnapshotRow(row: InvestmentSnapshot) {
+  editSnapshot(row.id)
+}
+
 function closeEditor() {
   showEditor.value = false
 }
@@ -134,7 +146,8 @@ function deleteSnapshot() {
 }
 
 function addItem() {
-  selectedSnapshot.value?.items.push(createInvestmentItem())
+  if (!selectedSnapshot.value) return
+  selectedSnapshot.value.items.push(createInvestmentItem(undefined, displayCurrency.value))
 }
 
 function removeItem(id: string) {
@@ -157,7 +170,7 @@ function initChart() {
 
 function renderChart() {
   if (!chart) return
-  activeChartPoint.value = activeChartPoint.value ?? chartStats.value.latest ?? null
+  syncActiveChartPoint()
   const points = chartSeries.value
   const option: EChartsOption = {
     animationDuration: 450,
@@ -233,6 +246,11 @@ function resizeChart() {
   chart?.resize()
 }
 
+function syncActiveChartPoint() {
+  const activeDate = activeChartPoint.value?.date
+  activeChartPoint.value = chartSeries.value.find((point) => point.date === activeDate) ?? chartStats.value.latest ?? null
+}
+
 function percent(value: number) {
   return `${value.toFixed(1)}%`
 }
@@ -247,7 +265,6 @@ function percent(value: number) {
         <p>Record all assets on a date, copy the last snapshot forward, and track the trend.</p>
       </div>
       <div class="actions">
-        <el-button @click="loadInvestments">Reload DB</el-button>
         <el-button type="primary" :icon="Plus" @click="addSnapshot">New Asset Snapshot</el-button>
       </div>
     </div>
@@ -260,13 +277,24 @@ function percent(value: number) {
           <div>
             <h2>Asset Trend</h2>
             <span class="section-subtitle">
+              {{ displayModeLabel }} /
               {{ activeChartPoint?.date ?? chartStats.latest?.date ?? 'No data' }}
               <template v-if="activeChartPoint"> / {{ formatMoney(activeChartPoint.displayTotal, displayCurrency) }}</template>
             </span>
           </div>
-          <div class="trend-stat" :class="{ positive: chartStats.delta >= 0, negative: chartStats.delta < 0 }">
-            <strong>{{ formatMoney(chartStats.delta, displayCurrency) }}</strong>
-            <span>{{ percent(chartStats.deltaPercent) }}</span>
+          <div class="trend-tools">
+            <el-segmented
+              v-model="totalDisplayMode"
+              :options="[
+                { label: 'Available', value: 'available' },
+                { label: 'Locked', value: 'locked' },
+                { label: 'All', value: 'all' },
+              ]"
+            />
+            <div class="trend-stat" :class="{ positive: chartStats.delta >= 0, negative: chartStats.delta < 0 }">
+              <strong>{{ formatMoney(chartStats.delta, displayCurrency) }}</strong>
+              <span>{{ percent(chartStats.deltaPercent) }}</span>
+            </div>
           </div>
         </div>
         <div ref="chartEl" class="trend-chart" role="img" aria-label="Investment total trend"></div>
@@ -278,20 +306,24 @@ function percent(value: number) {
 
         <div class="asset-summary-strip" v-if="latestSnapshot">
           <div class="asset-summary-item primary">
-            <span>Latest total</span>
-            <strong>{{ formatMoney(latestTotal, latestSnapshot.currency) }}</strong>
+            <span>Showing {{ displayModeLabel }}</span>
+            <strong>{{ formatMoney(latestDisplayedTotal, displayCurrency) }}</strong>
           </div>
           <div class="asset-summary-item">
-            <span>Snapshot date</span>
-            <strong>{{ latestSnapshot.date }}</strong>
+            <span>Available</span>
+            <strong>{{ formatMoney(latestAvailableTotal, displayCurrency) }}</strong>
           </div>
           <div class="asset-summary-item">
-            <span>Asset rows</span>
-            <strong>{{ latestSnapshot.items.length }}</strong>
+            <span>Locked</span>
+            <strong>{{ formatMoney(latestLockedTotal, displayCurrency) }}</strong>
           </div>
           <div class="asset-summary-item">
-            <span>Currency</span>
-            <strong>{{ latestSnapshot.currency }}</strong>
+            <span>All Assets</span>
+            <strong>{{ formatMoney(latestTotal, displayCurrency) }}</strong>
+          </div>
+          <div class="asset-summary-item">
+            <span>Display currency</span>
+            <strong>{{ displayCurrency }}</strong>
           </div>
         </div>
       </section>
@@ -302,17 +334,26 @@ function percent(value: number) {
         <h2>Snapshot History</h2>
         <span>{{ snapshots.length }} records</span>
       </div>
-      <el-table :data="pagedSnapshots" size="large" class="data-table" table-layout="fixed">
+      <el-table :data="pagedSnapshots" size="large" class="data-table" table-layout="fixed" @row-click="editSnapshotRow">
         <el-table-column label="Date" min-width="140">
           <template #default="{ row }">
             <strong>{{ row.date }}</strong>
           </template>
         </el-table-column>
-        <el-table-column label="Total Assets" min-width="160" align="right">
-          <template #default="{ row }">{{ formatMoney(snapshotTotal(row), row.currency) }}</template>
+        <el-table-column label="Available" min-width="150" align="right">
+          <template #default="{ row }">
+            <strong>{{ formatMoney(snapshotTotalByCategory(row, displayCurrency, 'available'), displayCurrency) }}</strong>
+          </template>
         </el-table-column>
-        <el-table-column label="Currency" min-width="100">
-          <template #default="{ row }">{{ row.currency }}</template>
+        <el-table-column label="Locked" min-width="150" align="right">
+          <template #default="{ row }">
+            {{ formatMoney(snapshotTotalByCategory(row, displayCurrency, 'locked'), displayCurrency) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="All" min-width="150" align="right">
+          <template #default="{ row }">
+            {{ formatMoney(snapshotTotal(row, displayCurrency), displayCurrency) }}
+          </template>
         </el-table-column>
         <el-table-column label="Rows" min-width="90" align="right">
           <template #default="{ row }">{{ row.items.length }}</template>
@@ -322,7 +363,7 @@ function percent(value: number) {
         </el-table-column>
         <el-table-column label="" width="100" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button @click="editSnapshot(row.id)">Edit</el-button>
+            <el-button @click.stop="editSnapshot(row.id)">Edit</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -336,69 +377,81 @@ function percent(value: number) {
       />
     </section>
 
-    <section v-if="showEditor && selectedSnapshot" class="panel snapshot-editor">
-      <div class="section-head">
-        <h2>Snapshot Editor</h2>
-        <span>{{ formatMoney(selectedTotal, selectedSnapshot.currency) }}</span>
-      </div>
+    <el-dialog
+      v-model="showEditor"
+      class="snapshot-dialog"
+      width="min(1180px, calc(100vw - 32px))"
+      top="5vh"
+      destroy-on-close
+      append-to-body
+    >
+      <template #header>
+        <div class="dialog-title" v-if="selectedSnapshot">
+          <div>
+            <span>Snapshot Editor</span>
+            <strong>{{ selectedSnapshot.date }}</strong>
+          </div>
+          <span>{{ formatMoney(selectedTotal, displayCurrency) }}</span>
+        </div>
+      </template>
 
-      <div class="month-fields">
-        <label>
-          <span>Date</span>
-          <el-input v-model="selectedSnapshot.date" />
-        </label>
-        <label>
-          <span>Currency</span>
-          <el-select v-model="selectedSnapshot.currency">
-            <el-option label="CAD" value="CAD" />
-            <el-option label="CNY" value="CNY" />
-            <el-option label="USD" value="USD" />
-          </el-select>
-        </label>
-        <label>
-          <span>Notes</span>
-          <el-input v-model="selectedSnapshot.notes" />
-        </label>
-      </div>
+      <template v-if="selectedSnapshot">
+        <div class="month-fields">
+          <label>
+            <span>Date</span>
+            <el-input v-model="selectedSnapshot.date" />
+          </label>
+          <label>
+            <span>Notes</span>
+            <el-input v-model="selectedSnapshot.notes" />
+          </label>
+        </div>
 
-      <div class="actions snapshot-actions">
-        <el-button :icon="Plus" @click="addItem">Add Asset</el-button>
-        <el-button :disabled="snapshots.length <= 1" @click="deleteSnapshot">Delete Snapshot</el-button>
-        <el-button @click="closeEditor">Close Editor</el-button>
-      </div>
+        <div class="actions snapshot-actions">
+          <el-button :icon="Plus" @click="addItem">Add Asset</el-button>
+        </div>
 
-      <el-table :data="selectedSnapshot.items" size="large" class="data-table holdings-table" table-layout="fixed">
-        <el-table-column label="Asset" min-width="190">
-          <template #default="{ row }">
-            <el-input v-model="row.name" placeholder="WS-TFSA, IBKR, Cash" />
-          </template>
-        </el-table-column>
-        <el-table-column label="Account" min-width="160">
-          <template #default="{ row }">
-            <el-input v-model="row.account" placeholder="Brokerage, bank, wallet" />
-          </template>
-        </el-table-column>
-        <el-table-column label="Category" min-width="150">
-          <template #default="{ row }">
-            <el-input v-model="row.category" placeholder="ETF, cash, crypto" />
-          </template>
-        </el-table-column>
-        <el-table-column label="Amount" min-width="160" align="right">
-          <template #default="{ row }">
-            <el-input-number v-model="row.amount" :precision="2" controls-position="right" />
-          </template>
-        </el-table-column>
-        <el-table-column label="Notes" min-width="220">
-          <template #default="{ row }">
-            <el-input v-model="row.notes" />
-          </template>
-        </el-table-column>
-        <el-table-column label="" width="72" fixed="right" align="center">
-          <template #default="{ row }">
-            <el-button :icon="Delete" circle aria-label="Delete row" @click="removeItem(row.id)" />
-          </template>
-        </el-table-column>
-      </el-table>
-    </section>
+        <el-table :data="selectedSnapshot.items" size="large" class="data-table holdings-table" table-layout="fixed" max-height="56vh">
+          <el-table-column label="Asset" min-width="190">
+            <template #default="{ row }">
+              <el-input v-model="row.name" placeholder="WS-TFSA, IBKR, Cash" />
+            </template>
+          </el-table-column>
+          <el-table-column label="Category" min-width="150">
+            <template #default="{ row }">
+              <el-select v-model="row.category" filterable allow-create default-first-option>
+                <el-option v-for="category in investmentCategoryOptions" :key="category" :label="category" :value="category" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="Currency" min-width="120">
+            <template #default="{ row }">
+              <el-select v-model="row.currency">
+                <el-option v-for="currency in currencyOptions" :key="currency" :label="currency" :value="currency" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="Amount" min-width="160" align="right">
+            <template #default="{ row }">
+              <el-input-number v-model="row.amount" :precision="2" controls-position="right" />
+            </template>
+          </el-table-column>
+          <el-table-column label="Notes" min-width="220">
+            <template #default="{ row }">
+              <el-input v-model="row.notes" />
+            </template>
+          </el-table-column>
+          <el-table-column label="" width="72" fixed="right" align="center">
+            <template #default="{ row }">
+              <el-button :icon="Delete" circle aria-label="Delete row" @click="removeItem(row.id)" />
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+
+      <template #footer>
+        <el-button @click="closeEditor">Done</el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
