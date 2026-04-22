@@ -27,6 +27,7 @@ interface MonthTrendPoint {
   income: number
   spending: number
   cashFlow: number
+  savingsRate: number
 }
 
 const months = computed(() => [...finance.value.months].sort((a, b) => b.label.localeCompare(a.label)))
@@ -50,6 +51,7 @@ const chartPoints = computed<MonthTrendPoint[]>(() =>
         income: summary.totalIncome,
         spending: Math.abs(summary.totalExpenses),
         cashFlow: summary.monthlyCashFlow,
+        savingsRate: summary.savingsRate,
       }
     }),
 )
@@ -185,12 +187,12 @@ function renderChart() {
   const option: EChartsOption = {
     animationDuration: 450,
     color: ['#1f7a63', '#d97432', '#2f6f9f'],
-    grid: { left: 74, right: 28, top: 28, bottom: 50, containLabel: false },
+    grid: { left: 74, right: 62, top: 28, bottom: 50, containLabel: false },
     legend: {
       top: 0,
       right: 8,
       textStyle: { color: '#68716d', fontWeight: 700 },
-      data: ['Income', 'Spending'],
+      data: ['Income', 'Spending', 'Savings Rate'],
     },
     tooltip: {
       trigger: 'axis',
@@ -208,6 +210,7 @@ function renderChart() {
           `Income: ${formatMoney(point.income, point.currency)}`,
           `Spending: ${formatMoney(point.spending, point.currency)}`,
           `Cash Flow: ${formatMoney(point.cashFlow, point.currency)}`,
+          `Savings Rate: ${percent(point.savingsRate)}`,
         ].join('<br/>')
       },
     },
@@ -219,21 +222,36 @@ function renderChart() {
       axisLine: { lineStyle: { color: '#cfd8d3' } },
       axisLabel: { color: '#68716d', hideOverlap: true },
     },
-    yAxis: {
-      type: 'value',
-      scale: true,
-      splitNumber: 5,
-      axisLabel: {
-        color: '#68716d',
-        formatter: (value: number) => formatMoney(value, activeChartPoint.value?.currency ?? latestMonth.value?.currency ?? 'CNY'),
+    yAxis: [
+      {
+        type: 'value',
+        scale: true,
+        splitNumber: 5,
+        axisLabel: {
+          color: '#68716d',
+          formatter: (value: number) => formatMoney(value, activeChartPoint.value?.currency ?? latestMonth.value?.currency ?? 'CNY'),
+        },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: '#dce4df' } },
       },
-      axisLine: { show: false },
-      axisTick: { show: false },
-      splitLine: { lineStyle: { color: '#dce4df' } },
-    },
+      {
+        type: 'value',
+        scale: true,
+        splitNumber: 5,
+        axisLabel: {
+          color: '#2f6f9f',
+          formatter: (value: number) => percent(value),
+        },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { show: false },
+      },
+    ],
     series: [
       monthSeries('Income', points.map((point) => point.income), '#1f7a63'),
       monthSeries('Spending', points.map((point) => point.spending), '#d97432'),
+      rateSeries('Savings Rate', points.map((point) => point.savingsRate), '#2f6f9f'),
     ],
   }
   chart.setOption(option, true)
@@ -250,6 +268,21 @@ function monthSeries(name: string, data: number[], color: string) {
     showSymbol: false,
     emphasis: { focus: 'series' as const, scale: true },
     lineStyle: { width: 3, color },
+  }
+}
+
+function rateSeries(name: string, data: number[], color: string) {
+  return {
+    type: 'line' as const,
+    name,
+    yAxisIndex: 1,
+    data,
+    smooth: true,
+    symbol: 'circle',
+    symbolSize: 6,
+    showSymbol: false,
+    emphasis: { focus: 'series' as const, scale: true },
+    lineStyle: { width: 2.5, color, type: 'dashed' as const },
   }
 }
 
