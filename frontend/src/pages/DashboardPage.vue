@@ -38,20 +38,26 @@ const assetGroups = computed(() => {
     .filter((asset) => asset.name || asset.amount)
     .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
 
-  return [
+  const groups = [
     {
       key: 'available',
       label: 'Available',
       total: investmentAvailable.value,
-      items: assets.filter((asset) => normalizeInvestmentCategory(asset.category) === 'Available').slice(0, 8),
+      items: assets.filter((asset) => normalizeInvestmentCategory(asset.category) === 'Available'),
     },
     {
       key: 'locked',
       label: 'Locked',
       total: investmentLocked.value,
-      items: assets.filter((asset) => normalizeInvestmentCategory(asset.category) === 'Locked').slice(0, 8),
+      items: assets.filter((asset) => normalizeInvestmentCategory(asset.category) === 'Locked'),
     },
   ]
+
+  return groups.map((group) => ({
+    ...group,
+    visibleItems: group.items.slice(0, 8),
+    breakdown: currencyBreakdown(group.items),
+  }))
 })
 
 onMounted(async () => {
@@ -75,6 +81,27 @@ function roundPercent(value: number) {
 
 function assetCurrency(asset: InvestmentItem) {
   return asset.currency || latestInvestmentSnapshot.value?.currency || displayCurrency.value
+}
+
+function formatNativeMoney(value: number, currency: string) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: assetCurrencyCode(currency) }).format(value)
+}
+
+function assetCurrencyCode(currency: string) {
+  if (currency === 'CAD' || currency === 'USD' || currency === 'CNY') return currency
+  return displayCurrency.value
+}
+
+function currencyBreakdown(items: InvestmentItem[]) {
+  const totals = items.reduce<Record<string, number>>((acc, item) => {
+    const currency = assetCurrency(item)
+    acc[currency] = (acc[currency] ?? 0) + item.amount
+    return acc
+  }, {})
+
+  return Object.entries(totals)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([currency, total]) => ({ currency, total }))
 }
 </script>
 
@@ -161,17 +188,34 @@ function assetCurrency(asset: InvestmentItem) {
         <div class="asset-groups">
           <div v-for="group in assetGroups" :key="group.key" class="asset-group">
             <div class="asset-group-head">
-              <span>{{ group.label }}</span>
+              <div>
+                <span>{{ group.label }}</span>
+                <small>{{ group.items.length }} records</small>
+              </div>
               <strong>{{ formatMoney(group.total, displayCurrency) }}</strong>
             </div>
+            <div class="asset-breakdown" v-if="group.breakdown.length">
+              <span v-for="entry in group.breakdown" :key="`${group.key}-${entry.currency}`">
+                {{ formatNativeMoney(entry.total, entry.currency) }}
+              </span>
+            </div>
             <div class="asset-list">
-              <div v-for="asset in group.items" :key="asset.id" class="asset-row">
+              <div v-for="asset in group.visibleItems" :key="asset.id" class="asset-row">
                 <span>{{ asset.name }}</span>
-                <strong>{{ formatMoney(asset.amount, assetCurrency(asset)) }}</strong>
+                <strong>
+                  {{ formatMoney(asset.amount, assetCurrency(asset)) }}
+                  <small v-if="assetCurrency(asset) !== displayCurrency">
+                    {{ formatNativeMoney(asset.amount, assetCurrency(asset)) }}
+                  </small>
+                </strong>
               </div>
-              <div v-if="!group.items.length" class="asset-row empty">
+              <div v-if="!group.visibleItems.length" class="asset-row empty">
                 <span>No records</span>
                 <strong>{{ formatMoney(0, displayCurrency) }}</strong>
+              </div>
+              <div v-else-if="group.items.length > group.visibleItems.length" class="asset-row more">
+                <span>{{ group.items.length - group.visibleItems.length }} more records</span>
+                <strong>Open Assets</strong>
               </div>
             </div>
           </div>

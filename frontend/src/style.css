@@ -239,7 +239,11 @@ body {
 
 .asset-group {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  border: 1px solid #d6e3de;
+  border-radius: 8px;
+  padding: 12px;
+  background: linear-gradient(180deg, #ffffff, #fbfcfa);
 }
 
 .asset-group-head {
@@ -253,9 +257,39 @@ body {
   text-transform: uppercase;
 }
 
+.asset-group-head div {
+  display: grid;
+  gap: 2px;
+}
+
+.asset-group-head small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+}
+
 .asset-group-head strong {
   color: var(--accent-strong);
-  font-size: 14px;
+  font-size: 18px;
+  line-height: 1.15;
+  text-align: right;
+}
+
+.asset-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.asset-breakdown span {
+  border: 1px solid #d7e4df;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #f7fbf9;
+  color: #38516f;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .risk-list,
@@ -284,6 +318,24 @@ body {
 .asset-row.empty {
   color: var(--muted);
   background: #f7f8f7;
+}
+
+.asset-row.more {
+  color: var(--muted);
+  background: #f7fbf9;
+}
+
+.asset-row strong {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  line-height: 1.15;
+}
+
+.asset-row strong small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .risk-row.low {
