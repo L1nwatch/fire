@@ -19,6 +19,8 @@ const activeChartPoint = ref<MonthTrendPoint | null>(null)
 const historyPage = ref(1)
 const historyPageSize = 10
 let chart: ECharts | null = null
+const savingsRateChartMin = -100
+const savingsRateChartMax = 100
 
 interface MonthTrendPoint {
   id: string
@@ -28,6 +30,8 @@ interface MonthTrendPoint {
   spending: number
   cashFlow: number
   savingsRate: number
+  chartSavingsRate: number
+  savingsRateCapped: boolean
 }
 
 const months = computed(() => [...finance.value.months].sort((a, b) => b.label.localeCompare(a.label)))
@@ -44,6 +48,7 @@ const chartPoints = computed<MonthTrendPoint[]>(() =>
     .sort((a, b) => a.label.localeCompare(b.label))
     .map((month) => {
       const summary = summarizeMonth(month)
+      const chartSavingsRate = clampSavingsRate(summary.savingsRate)
       return {
         id: month.id,
         label: month.label,
@@ -52,6 +57,8 @@ const chartPoints = computed<MonthTrendPoint[]>(() =>
         spending: Math.abs(summary.totalExpenses),
         cashFlow: summary.monthlyCashFlow,
         savingsRate: summary.savingsRate,
+        chartSavingsRate,
+        savingsRateCapped: summary.savingsRate !== chartSavingsRate,
       }
     }),
 )
@@ -210,7 +217,7 @@ function renderChart() {
           `Income: ${formatMoney(point.income, point.currency)}`,
           `Spending: ${formatMoney(point.spending, point.currency)}`,
           `Cash Flow: ${formatMoney(point.cashFlow, point.currency)}`,
-          `Savings Rate: ${percent(point.savingsRate)}`,
+          `Savings Rate: ${percent(point.savingsRate)}${point.savingsRateCapped ? ' (capped on chart)' : ''}`,
         ].join('<br/>')
       },
     },
@@ -226,6 +233,8 @@ function renderChart() {
       {
         type: 'value',
         scale: true,
+        min: savingsRateChartMin,
+        max: savingsRateChartMax,
         splitNumber: 5,
         axisLabel: {
           color: '#68716d',
@@ -251,7 +260,7 @@ function renderChart() {
     series: [
       monthSeries('Income', points.map((point) => point.income), '#1f7a63'),
       monthSeries('Spending', points.map((point) => point.spending), '#d97432'),
-      rateSeries('Savings Rate', points.map((point) => point.savingsRate), '#2f6f9f'),
+      rateSeries('Savings Rate', points.map((point) => point.chartSavingsRate), '#2f6f9f'),
     ],
   }
   chart.setOption(option, true)
@@ -297,6 +306,11 @@ function syncActiveChartPoint() {
 
 function percent(value: number) {
   return `${value.toFixed(1)}%`
+}
+
+function clampSavingsRate(value: number) {
+  if (!Number.isFinite(value)) return 0
+  return Math.min(savingsRateChartMax, Math.max(savingsRateChartMin, value))
 }
 </script>
 
