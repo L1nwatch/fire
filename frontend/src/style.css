@@ -234,6 +234,7 @@ body {
 
 .asset-groups {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -321,6 +322,17 @@ body {
 .asset-row.more {
   color: var(--muted);
   background: #f7fbf9;
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.asset-row.more:hover {
+  border-color: var(--accent);
+  background: #eef8f4;
+  color: var(--accent-strong);
 }
 
 .risk-row.low {
@@ -706,6 +718,7 @@ body {
 
   .metric-grid,
   .dashboard-grid,
+  .asset-groups,
   .workbook-layout,
   .month-fields {
     grid-template-columns: 1fr;

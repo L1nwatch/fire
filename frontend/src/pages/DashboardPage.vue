@@ -181,10 +181,10 @@ function assetCurrency(asset: InvestmentItem) {
                 <span>No records</span>
                 <strong>{{ formatMoney(0, displayCurrency) }}</strong>
               </div>
-              <div v-else-if="group.items.length > group.visibleItems.length" class="asset-row more">
+              <router-link v-else-if="group.items.length > group.visibleItems.length" class="asset-row more" to="/assets">
                 <span>{{ group.items.length - group.visibleItems.length }} more records</span>
                 <strong>Open Assets</strong>
-              </div>
+              </router-link>
             </div>
           </div>
         </div>
