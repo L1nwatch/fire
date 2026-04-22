@@ -142,7 +142,7 @@ function assetCurrency(asset: InvestmentItem) {
         </div>
       </section>
 
-      <section class="panel assets-panel">
+      <section class="panel">
         <div class="section-head">
           <h2>Investment Allocation</h2>
           <span>{{ displayCurrency }}</span>
@@ -157,38 +157,38 @@ function assetCurrency(asset: InvestmentItem) {
           </el-table-column>
         </el-table>
       </section>
+    </div>
 
-      <section class="panel">
-        <div class="section-head">
-          <h2>Assets</h2>
-          <span>{{ latestInvestmentSnapshot?.date ?? currentMonth.label }}</span>
-        </div>
-        <div class="asset-groups">
-          <div v-for="group in assetGroups" :key="group.key" class="asset-group" :class="group.key">
-            <div class="asset-group-head">
-              <div>
-                <span>{{ group.label }}</span>
-                <small>{{ group.items.length }} records</small>
-              </div>
-              <strong>{{ formatMoney(group.total, displayCurrency) }}</strong>
+    <section class="panel assets-panel">
+      <div class="section-head">
+        <h2>Assets</h2>
+        <span>{{ latestInvestmentSnapshot?.date ?? currentMonth.label }}</span>
+      </div>
+      <div class="asset-groups">
+        <div v-for="group in assetGroups" :key="group.key" class="asset-group" :class="group.key">
+          <div class="asset-group-head">
+            <div>
+              <span>{{ group.label }}</span>
+              <small>{{ group.items.length }} records</small>
             </div>
-            <div class="asset-list">
-              <div v-for="asset in group.visibleItems" :key="asset.id" class="asset-row">
-                <span>{{ asset.name }}</span>
-                <strong>{{ formatMoney(asset.amount, assetCurrency(asset)) }}</strong>
-              </div>
-              <div v-if="!group.visibleItems.length" class="asset-row empty">
-                <span>No records</span>
-                <strong>{{ formatMoney(0, displayCurrency) }}</strong>
-              </div>
-              <router-link v-else-if="group.items.length > group.visibleItems.length" class="asset-row more" to="/assets">
-                <span>{{ group.items.length - group.visibleItems.length }} more records</span>
-                <strong>Open Assets</strong>
-              </router-link>
+            <strong>{{ formatMoney(group.total, displayCurrency) }}</strong>
+          </div>
+          <div class="asset-list">
+            <div v-for="asset in group.visibleItems" :key="asset.id" class="asset-row">
+              <span>{{ asset.name }}</span>
+              <strong>{{ formatMoney(asset.amount, assetCurrency(asset)) }}</strong>
             </div>
+            <div v-if="!group.visibleItems.length" class="asset-row empty">
+              <span>No records</span>
+              <strong>{{ formatMoney(0, displayCurrency) }}</strong>
+            </div>
+            <router-link v-else-if="group.items.length > group.visibleItems.length" class="asset-row more" to="/assets">
+              <span>{{ group.items.length - group.visibleItems.length }} more records</span>
+              <strong>Open Assets</strong>
+            </router-link>
           </div>
         </div>
-      </section>
-    </div>
+      </div>
+    </section>
   </section>
 </template>
