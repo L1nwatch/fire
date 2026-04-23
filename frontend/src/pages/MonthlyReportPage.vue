@@ -42,13 +42,13 @@ const pagedMonths = computed(() => {
   return months.value.slice(start, start + historyPageSize)
 })
 const latestMonth = computed(() => months.value[0])
-const latestSummary = computed(() => summarizeMonth(latestMonth.value ?? emptyMonth()))
+const latestSummary = computed(() => (latestMonth.value ? monthSummary(latestMonth.value) : summarizeMonth(emptyMonth())))
 const latestActiveIncome = computed(() => activeIncomeValue(latestSummary.value.totalIncome, latestSummary.value.passiveIncome))
 const chartPoints = computed<MonthTrendPoint[]>(() =>
   [...finance.value.months]
     .sort((a, b) => a.label.localeCompare(b.label))
     .map((month) => {
-      const summary = summarizeMonth(month)
+      const summary = monthSummary(month)
       const chartSavingsRate = clampSavingsRate(summary.savingsRate)
       return {
         id: month.id,

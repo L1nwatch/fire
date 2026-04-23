@@ -313,7 +313,9 @@ def init_db(conn: sqlite3.Connection) -> None:
 def load_finance_state(conn: sqlite3.Connection) -> dict[str, Any]:
     months = []
     month_rows = conn.execute("SELECT * FROM financial_months ORDER BY label DESC").fetchall()
+    existing_month_labels: set[str] = set()
     for month in month_rows:
+        existing_month_labels.add(month["label"])
         items = conn.execute(
             "SELECT * FROM money_items WHERE month_id = ? ORDER BY section, position, name",
             (month["id"],),
@@ -354,6 +356,29 @@ def load_finance_state(conn: sqlite3.Connection) -> dict[str, Any]:
         )
 
     ledger_rows = conn.execute("SELECT * FROM daily_ledger ORDER BY date DESC, source_row DESC").fetchall()
+    ledger_month_currencies: dict[str, str] = {}
+    for row in ledger_rows:
+        month_label = ledger_month_label(row["date"])
+        if not month_label or month_label in existing_month_labels or month_label in ledger_month_currencies:
+            continue
+        ledger_month_currencies[month_label] = normalize_currency(row["currency"], "CNY")
+
+    for month_label in sorted(ledger_month_currencies.keys(), reverse=True):
+        months.append(
+            {
+                "id": f"ledger-month-{month_label}",
+                "label": month_label,
+                "currency": ledger_month_currencies[month_label],
+                "passiveIncome": 0,
+                "conclusion": "Auto-generated from daily ledger.",
+                "income": [],
+                "expenses": [],
+                "assets": [],
+                "liabilities": [],
+            }
+        )
+
+    months.sort(key=lambda month: month["label"], reverse=True)
     legacy_generated_bases_with_detailed_expense: set[str] = set()
     for row in ledger_rows:
         parsed = parse_legacy_generated_ledger_id(row["id"])
@@ -555,6 +580,16 @@ def normalize_ledger_category(category: str | None) -> str:
         return "expense-other"
     if value in LEDGER_EXPENSE_CATEGORIES:
         return value
+    return ""
+
+
+def ledger_month_label(date_text: str | None) -> str:
+    value = (date_text or "").strip()
+    if len(value) < 7:
+        return ""
+    month_label = value[:7]
+    if len(month_label) == 7 and month_label[4] == "-":
+        return month_label
     return ""
 
 

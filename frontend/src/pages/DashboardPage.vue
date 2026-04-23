@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { fetchFinanceState, fetchInvestmentState, fetchPortfolioState } from '../lib/api'
 import { convertMoney, displayCurrency, formatMoney, normalizeCurrency } from '../lib/currency'
-import { emptyMonth, sampleFinanceState, summarizeMonth } from '../lib/finance'
+import { emptyMonth, sampleFinanceState, summarizeLedger, summarizeMonth, type FinancialMonth } from '../lib/finance'
 import {
   emptyInvestmentState,
   investmentItemAmount,
@@ -18,7 +18,7 @@ const investments = ref(emptyInvestmentState())
 const portfolio = ref(emptyInvestmentState())
 const loadError = ref('')
 const currentMonth = computed(() => finance.value.months[0] ?? emptyMonth())
-const financeSummary = computed(() => summarizeMonth(currentMonth.value))
+const financeSummary = computed(() => summarizeFinanceMonth(currentMonth.value))
 const latestInvestmentSnapshot = computed(() => sortedSnapshots(investments.value)[0])
 const latestPortfolioSnapshot = computed(() => sortedSnapshots(portfolio.value)[0])
 const investmentTotal = computed(() => snapshotTotal(latestInvestmentSnapshot.value, displayCurrency.value))
@@ -113,8 +113,37 @@ function percent(value: number) {
   return `${value.toFixed(1)}%`
 }
 
+function summarizeFinanceMonth(month: FinancialMonth) {
+  const baseSummary = summarizeMonth(month)
+  const ledgerSummary = summarizeLedger(
+    finance.value.ledger.filter((entry) => ledgerMonth(entry.date) === month.label),
+    month.currency,
+  )
+  const totalIncome = roundMoney(ledgerSummary.income)
+  const totalExpenses = roundMoney(ledgerSummary.expense)
+  const monthlyCashFlow = roundMoney(totalIncome + totalExpenses)
+  const savingsRate = totalIncome ? roundPercent((monthlyCashFlow / totalIncome) * 100) : 0
+  return {
+    ...baseSummary,
+    totalIncome,
+    totalExpenses,
+    monthlyCashFlow,
+    savingsRate,
+  }
+}
+
+function ledgerMonth(date: string) {
+  const match = /^(\d{4})-(\d{2})/.exec(date ?? '')
+  if (!match) return ''
+  return `${match[1]}-${match[2]}`
+}
+
 function roundPercent(value: number) {
   return Math.round((Number.isFinite(value) ? value : 0) * 10) / 10
+}
+
+function roundMoney(value: number) {
+  return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
 }
 
 function assetCurrency(asset: InvestmentItem) {
