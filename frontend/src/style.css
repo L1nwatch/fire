@@ -812,6 +812,45 @@ body {
   width: 100%;
 }
 
+.investment-list-table .el-table__row {
+  cursor: pointer;
+}
+
+.investment-list-table .el-table__row:hover > td.el-table__cell {
+  background: #f2f7ff !important;
+}
+
+.quote-action-wrap .el-button {
+  justify-self: start;
+}
+
+.auto-refresh-hint {
+  font-size: 12px;
+  color: var(--muted);
+  align-self: center;
+}
+
+.pl-cell {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  line-height: 1.2;
+}
+
+.pl-cell strong {
+  font-size: 13px;
+}
+
+.pl-cell small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.pl-cell.positive small,
+.pl-cell.negative small {
+  color: inherit;
+}
+
 .positive {
   color: var(--green);
 }

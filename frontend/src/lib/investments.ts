@@ -19,9 +19,13 @@ export const investmentTypeOptions = [
 export interface InvestmentItem {
   id: string
   name: string
+  symbol?: string
   account: string
   type: string
   category: string
+  shares?: number
+  unitPrice?: number
+  costBasis?: number
   amount: number
   currency?: string
   notes: string
@@ -44,13 +48,27 @@ export const emptyInvestmentState = (): InvestmentState => ({
 })
 
 export function createInvestmentItem(item?: Partial<InvestmentItem>, defaultCurrency = 'CAD'): InvestmentItem {
+  const type = normalizeInvestmentType(item?.type, 'Cash')
+  const shares = Number.isFinite(item?.shares) ? Number(item?.shares) : 0
+  const unitPrice = Number.isFinite(item?.unitPrice) ? Number(item?.unitPrice) : 0
+  const amount = Number.isFinite(item?.amount) ? Number(item?.amount) : 0
+  const isShareBased = isShareBasedType(type)
+  const defaultCostBasis = isShareBased
+    ? (unitPrice || (shares ? amount / shares : 0))
+    : amount
+  const inputCostBasis = Number.isFinite(item?.costBasis) ? Number(item?.costBasis) : NaN
+  const normalizedCostBasis = Number.isFinite(inputCostBasis) && Math.abs(inputCostBasis) > 1e-9 ? inputCostBasis : defaultCostBasis
   return {
     id: crypto.randomUUID(),
     name: item?.name ?? '',
+    symbol: item?.symbol ?? '',
     account: item?.account ?? '',
-    type: normalizeInvestmentType(item?.type, 'Cash'),
+    type,
     category: normalizeInvestmentCategory(item?.category),
-    amount: item?.amount ?? 0,
+    shares,
+    unitPrice,
+    costBasis: normalizedCostBasis,
+    amount,
     currency: item?.currency ?? defaultCurrency,
     notes: item?.notes ?? '',
   }
@@ -74,6 +92,37 @@ export function normalizeInvestmentType(type?: string, fallback = 'Other') {
   if (value === 'fund') return 'Fund'
   if (value === 'other') return 'Other'
   return String(type).trim() || fallback
+}
+
+export function isShareBasedType(type?: string) {
+  const normalizedType = normalizeInvestmentType(type, 'Other')
+  return normalizedType === 'Stock' || normalizedType === 'ETF' || normalizedType === 'Option' || normalizedType === 'Crypto' || normalizedType === 'Bond' || normalizedType === 'Fund'
+}
+
+export function investmentItemAmount(item: InvestmentItem) {
+  if (!isShareBasedType(item.type)) return Number.isFinite(item.amount) ? item.amount : 0
+  const shares = Number.isFinite(item.shares) ? Number(item.shares) : 0
+  const unitPrice = Number.isFinite(item.unitPrice) ? Number(item.unitPrice) : 0
+  const computed = shares * unitPrice
+  if (Math.abs(computed) > 1e-9) return computed
+  return Number.isFinite(item.amount) ? item.amount : 0
+}
+
+export function investmentItemCost(item: InvestmentItem) {
+  if (!isShareBasedType(item.type)) {
+    if (Number.isFinite(item.costBasis) && Math.abs(Number(item.costBasis)) > 1e-9) return Number(item.costBasis)
+    return Number.isFinite(item.amount) ? Number(item.amount) : 0
+  }
+  const shares = Number.isFinite(item.shares) ? Number(item.shares) : 0
+  const costBasis = Number.isFinite(item.costBasis) ? Number(item.costBasis) : 0
+  const computed = shares * costBasis
+  if (Math.abs(computed) > 1e-9) return computed
+  if (Number.isFinite(item.amount) && Math.abs(Number(item.amount)) > 1e-9) return Number(item.amount)
+  return investmentItemAmount(item)
+}
+
+export function investmentItemProfit(item: InvestmentItem) {
+  return investmentItemAmount(item) - investmentItemCost(item)
 }
 
 export function createSnapshotFromPrevious(previous?: InvestmentSnapshot): InvestmentSnapshot {
@@ -104,7 +153,7 @@ export function snapshotTotalByCategory(
       if (category === 'available' && normalizedCategory !== 'Available') return sum
       if (category === 'locked' && normalizedCategory !== 'Locked') return sum
       const itemCurrency = normalizeCurrency(item.currency || snapshot.currency || targetCurrency)
-      return sum + convertMoney(item.amount, itemCurrency, targetCurrency)
+      return sum + convertMoney(investmentItemAmount(item), itemCurrency, targetCurrency)
     }, 0),
   )
 }

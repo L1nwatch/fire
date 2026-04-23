@@ -59,3 +59,18 @@ export async function savePortfolioStateToDb(state: InvestmentState): Promise<vo
     throw new Error(`Failed to save portfolio: ${response.status}`)
   }
 }
+
+export interface MarketQuote {
+  symbol: string
+  price: number
+  currency: string
+  source: string
+}
+
+export async function fetchLatestQuote(symbol: string): Promise<MarketQuote> {
+  const response = await fetch(`${apiBase}/api/market/quote?symbol=${encodeURIComponent(symbol)}`)
+  if (!response.ok) {
+    throw new Error(`Failed to load quote for ${symbol}: ${response.status}`)
+  }
+  return (await response.json()) as MarketQuote
+}

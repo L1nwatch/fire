@@ -122,9 +122,13 @@ def init_db(conn: sqlite3.Connection) -> None:
             id TEXT PRIMARY KEY,
             snapshot_id TEXT NOT NULL REFERENCES investment_snapshots(id) ON DELETE CASCADE,
             name TEXT NOT NULL,
+            symbol TEXT NOT NULL DEFAULT '',
             account TEXT NOT NULL DEFAULT '',
             item_type TEXT NOT NULL DEFAULT '',
             category TEXT NOT NULL DEFAULT '',
+            shares REAL NOT NULL DEFAULT 0,
+            unit_price REAL NOT NULL DEFAULT 0,
+            cost_basis REAL NOT NULL DEFAULT 0,
             amount REAL NOT NULL DEFAULT 0,
             currency TEXT NOT NULL DEFAULT 'CAD',
             notes TEXT NOT NULL DEFAULT '',
@@ -142,9 +146,13 @@ def init_db(conn: sqlite3.Connection) -> None:
             id TEXT PRIMARY KEY,
             snapshot_id TEXT NOT NULL REFERENCES portfolio_snapshots(id) ON DELETE CASCADE,
             name TEXT NOT NULL,
+            symbol TEXT NOT NULL DEFAULT '',
             account TEXT NOT NULL DEFAULT '',
             item_type TEXT NOT NULL DEFAULT '',
             category TEXT NOT NULL DEFAULT '',
+            shares REAL NOT NULL DEFAULT 0,
+            unit_price REAL NOT NULL DEFAULT 0,
+            cost_basis REAL NOT NULL DEFAULT 0,
             amount REAL NOT NULL DEFAULT 0,
             currency TEXT NOT NULL DEFAULT 'CAD',
             notes TEXT NOT NULL DEFAULT '',
@@ -175,6 +183,21 @@ def init_db(conn: sqlite3.Connection) -> None:
         )
     if "item_type" not in investment_item_columns:
         conn.execute("ALTER TABLE investment_items ADD COLUMN item_type TEXT NOT NULL DEFAULT ''")
+    if "symbol" not in investment_item_columns:
+        conn.execute("ALTER TABLE investment_items ADD COLUMN symbol TEXT NOT NULL DEFAULT ''")
+    if "shares" not in investment_item_columns:
+        conn.execute("ALTER TABLE investment_items ADD COLUMN shares REAL NOT NULL DEFAULT 0")
+    if "unit_price" not in investment_item_columns:
+        conn.execute("ALTER TABLE investment_items ADD COLUMN unit_price REAL NOT NULL DEFAULT 0")
+    if "cost_basis" not in investment_item_columns:
+        conn.execute("ALTER TABLE investment_items ADD COLUMN cost_basis REAL NOT NULL DEFAULT 0")
+        conn.execute(
+            """
+            UPDATE investment_items
+            SET cost_basis = unit_price
+            WHERE abs(cost_basis) <= 1e-9 AND abs(unit_price) > 1e-9
+            """
+        )
     portfolio_item_columns = {
         row["name"]
         for row in conn.execute("PRAGMA table_info(portfolio_items)").fetchall()
@@ -198,6 +221,21 @@ def init_db(conn: sqlite3.Connection) -> None:
         )
     if "item_type" not in portfolio_item_columns:
         conn.execute("ALTER TABLE portfolio_items ADD COLUMN item_type TEXT NOT NULL DEFAULT ''")
+    if "symbol" not in portfolio_item_columns:
+        conn.execute("ALTER TABLE portfolio_items ADD COLUMN symbol TEXT NOT NULL DEFAULT ''")
+    if "shares" not in portfolio_item_columns:
+        conn.execute("ALTER TABLE portfolio_items ADD COLUMN shares REAL NOT NULL DEFAULT 0")
+    if "unit_price" not in portfolio_item_columns:
+        conn.execute("ALTER TABLE portfolio_items ADD COLUMN unit_price REAL NOT NULL DEFAULT 0")
+    if "cost_basis" not in portfolio_item_columns:
+        conn.execute("ALTER TABLE portfolio_items ADD COLUMN cost_basis REAL NOT NULL DEFAULT 0")
+        conn.execute(
+            """
+            UPDATE portfolio_items
+            SET cost_basis = unit_price
+            WHERE abs(cost_basis) <= 1e-9 AND abs(unit_price) > 1e-9
+            """
+        )
     money_item_columns = {
         row["name"]
         for row in conn.execute("PRAGMA table_info(money_items)").fetchall()
@@ -526,6 +564,11 @@ def normalize_investment_type(item_type: str | None, name: str | None = "") -> s
     return "Other"
 
 
+def is_share_based_type(item_type: str | None) -> bool:
+    value = normalize_investment_type(item_type)
+    return value in {"Stock", "ETF", "Option", "Crypto", "Bond", "Fund"}
+
+
 def parse_legacy_generated_ledger_id(entry_id: str | None) -> tuple[str, str] | None:
     value = (entry_id or "").strip()
     parts = value.rsplit(":", 2)
@@ -630,9 +673,13 @@ def _load_snapshot_state(conn: sqlite3.Connection, snapshot_table: str, item_tab
                     {
                         "id": item["id"],
                         "name": item["name"],
+                        "symbol": item["symbol"],
                         "account": item["account"],
                         "type": normalize_investment_type(item["item_type"], item["name"]),
                         "category": item["category"],
+                        "shares": float(item["shares"] or 0),
+                        "unitPrice": float(item["unit_price"] or 0),
+                        "costBasis": float(item["cost_basis"] or 0),
                         "amount": item["amount"],
                         "currency": item["currency"] or snapshot["currency"],
                         "notes": item["notes"],
@@ -661,20 +708,35 @@ def _save_snapshot_state(conn: sqlite3.Connection, state: dict[str, Any], snapsh
             ),
         )
         for position, item in enumerate(snapshot.get("items", [])):
+            item_type = normalize_investment_type(item.get("type", ""), item.get("name", ""))
+            shares = float(item.get("shares") or 0)
+            unit_price = float(item.get("unitPrice") or item.get("unit_price") or 0)
+            input_cost_basis = float(item.get("costBasis") or item.get("cost_basis") or 0)
+            input_amount = float(item.get("amount") or 0)
+            computed_amount = shares * unit_price
+            amount = computed_amount if is_share_based_type(item_type) and abs(computed_amount) > 1e-9 else input_amount
+            if is_share_based_type(item_type):
+                cost_basis = input_cost_basis if abs(input_cost_basis) > 1e-9 else unit_price
+            else:
+                cost_basis = input_cost_basis if abs(input_cost_basis) > 1e-9 else input_amount
             conn.execute(
                 f"""
                 INSERT INTO {item_table}
-                  (id, snapshot_id, name, account, item_type, category, amount, currency, notes, position)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  (id, snapshot_id, name, symbol, account, item_type, category, shares, unit_price, cost_basis, amount, currency, notes, position)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     item["id"],
                     snapshot["id"],
                     item.get("name", ""),
+                    item.get("symbol", ""),
                     item.get("account", ""),
-                    normalize_investment_type(item.get("type", ""), item.get("name", "")),
+                    item_type,
                     item.get("category", ""),
-                    float(item.get("amount") or 0),
+                    shares,
+                    unit_price,
+                    cost_basis,
+                    amount,
                     item.get("currency") or snapshot.get("currency", "CAD"),
                     item.get("notes", ""),
                     position,
