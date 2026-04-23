@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { fetchFinanceState, fetchInvestmentState } from '../lib/api'
-import { displayCurrency, formatMoney } from '../lib/currency'
+import { fetchFinanceState, fetchInvestmentState, fetchPortfolioState } from '../lib/api'
+import { convertMoney, displayCurrency, formatMoney, normalizeCurrency } from '../lib/currency'
 import { emptyMonth, sampleFinanceState, summarizeMonth } from '../lib/finance'
 import {
   emptyInvestmentState,
+  investmentItemAmount,
   normalizeInvestmentCategory,
   snapshotTotal,
   snapshotTotalByCategory,
@@ -14,13 +15,46 @@ import {
 
 const finance = ref(sampleFinanceState)
 const investments = ref(emptyInvestmentState())
+const portfolio = ref(emptyInvestmentState())
 const loadError = ref('')
 const currentMonth = computed(() => finance.value.months[0] ?? emptyMonth())
 const financeSummary = computed(() => summarizeMonth(currentMonth.value))
 const latestInvestmentSnapshot = computed(() => sortedSnapshots(investments.value)[0])
+const latestPortfolioSnapshot = computed(() => sortedSnapshots(portfolio.value)[0])
 const investmentTotal = computed(() => snapshotTotal(latestInvestmentSnapshot.value, displayCurrency.value))
+const portfolioInvestmentTotal = computed(() => snapshotTotal(latestPortfolioSnapshot.value, displayCurrency.value))
 const investmentAvailable = computed(() => snapshotTotalByCategory(latestInvestmentSnapshot.value, displayCurrency.value, 'available'))
 const investmentLocked = computed(() => snapshotTotalByCategory(latestInvestmentSnapshot.value, displayCurrency.value, 'locked'))
+const barbellBreakdown = computed(() => {
+  const snapshot = latestPortfolioSnapshot.value
+  const items = snapshot?.items ?? []
+  const entries = items
+    .map((item) => {
+      const sourceCurrency = normalizeCurrency(item.currency || snapshot?.currency || displayCurrency.value)
+      const value = convertMoney(investmentItemAmount(item), sourceCurrency, displayCurrency.value)
+      return {
+        id: item.id,
+        value,
+        defensive: isDefensiveBarbellItem(item),
+      }
+    })
+    .filter((entry) => Math.abs(entry.value) > 1e-9)
+
+  const total = entries.reduce((sum, entry) => sum + entry.value, 0)
+  const defensiveTotal = entries.filter((entry) => entry.defensive).reduce((sum, entry) => sum + entry.value, 0)
+  const aggressiveTotal = entries.filter((entry) => !entry.defensive).reduce((sum, entry) => sum + entry.value, 0)
+  return {
+    total,
+    defensive: {
+      total: defensiveTotal,
+      share: total ? defensiveTotal / total : 0,
+    },
+    aggressive: {
+      total: aggressiveTotal,
+      share: total ? aggressiveTotal / total : 0,
+    },
+  }
+})
 const allocation = computed(() => {
   const total = investmentTotal.value
   return [
@@ -61,9 +95,14 @@ const assetGroups = computed(() => {
 
 onMounted(async () => {
   try {
-    const [financeState, investmentState] = await Promise.all([fetchFinanceState(), fetchInvestmentState()])
+    const [financeState, investmentState, portfolioState] = await Promise.all([
+      fetchFinanceState(),
+      fetchInvestmentState(),
+      fetchPortfolioState(),
+    ])
     finance.value = financeState
     investments.value = investmentState
+    portfolio.value = portfolioState
     loadError.value = ''
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : 'Failed to load finance database'
@@ -81,6 +120,16 @@ function roundPercent(value: number) {
 function assetCurrency(asset: InvestmentItem) {
   return asset.currency || latestInvestmentSnapshot.value?.currency || displayCurrency.value
 }
+
+function isDefensiveBarbellItem(item: InvestmentItem) {
+  const normalizedType = String(item.type || '').trim().toLowerCase()
+  const normalizedName = String(item.name || '').trim().toLowerCase()
+  const normalizedSymbol = String(item.symbol || '').trim().toLowerCase()
+  if (normalizedType === 'cash') return true
+  if (normalizedName.includes('cbil')) return true
+  if (normalizedSymbol === 'cbil' || normalizedSymbol.startsWith('cbil.')) return true
+  return false
+}
 </script>
 
 <template>
@@ -91,7 +140,6 @@ function assetCurrency(asset: InvestmentItem) {
         <h1>Financial position</h1>
         <p>Monthly report, daily spending, asset balances, liabilities, and investments in one workspace.</p>
       </div>
-      <el-button type="primary" tag="router-link" to="/monthly">Update Month</el-button>
     </div>
 
     <el-alert v-if="loadError" :title="loadError" type="warning" show-icon :closable="false" class="page-alert" />
@@ -99,8 +147,8 @@ function assetCurrency(asset: InvestmentItem) {
     <div class="metric-grid">
       <article class="metric-card">
         <span>Net Worth</span>
-        <strong>{{ formatMoney(financeSummary.netWorth, currentMonth.currency) }}</strong>
-        <small>{{ formatMoney(financeSummary.totalAssets, currentMonth.currency) }} assets</small>
+        <strong>{{ formatMoney(investmentAvailable, displayCurrency) }}</strong>
+        <small>{{ formatMoney(investmentAvailable, displayCurrency) }} available assets</small>
       </article>
       <article class="metric-card">
         <span>Monthly Cash Flow</span>
@@ -111,8 +159,8 @@ function assetCurrency(asset: InvestmentItem) {
       </article>
       <article class="metric-card">
         <span>Investment Value</span>
-        <strong>{{ formatMoney(investmentTotal, displayCurrency) }}</strong>
-        <small>{{ latestInvestmentSnapshot?.date ?? 'No asset snapshot' }}</small>
+        <strong>{{ formatMoney(portfolioInvestmentTotal, displayCurrency) }}</strong>
+        <small>{{ latestPortfolioSnapshot ? 'Current portfolio' : 'No investment snapshot' }}</small>
       </article>
     </div>
 
@@ -156,6 +204,22 @@ function assetCurrency(asset: InvestmentItem) {
             <template #default="{ row }">{{ percent(row.weight) }}</template>
           </el-table-column>
         </el-table>
+        <div class="report-stack" style="margin-top: 12px">
+          <div class="report-row">
+            <span>Barbell Left (Defensive)</span>
+            <div class="barbell-row-values">
+              <strong>{{ formatMoney(barbellBreakdown.defensive.total, displayCurrency) }}</strong>
+              <small>{{ percent(barbellBreakdown.defensive.share * 100) }} of portfolio</small>
+            </div>
+          </div>
+          <div class="report-row">
+            <span>Barbell Right (Growth / Options)</span>
+            <div class="barbell-row-values">
+              <strong>{{ formatMoney(barbellBreakdown.aggressive.total, displayCurrency) }}</strong>
+              <small>{{ percent(barbellBreakdown.aggressive.share * 100) }} of portfolio</small>
+            </div>
+          </div>
+        </div>
       </section>
     </div>
 
