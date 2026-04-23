@@ -295,6 +295,26 @@ body {
   color: #9a6417;
 }
 
+.barbell-aggressive {
+  border-color: #cfd0ec;
+  background: linear-gradient(135deg, #eef0ff, #fbfbff);
+}
+
+.barbell-aggressive .asset-group-head strong {
+  color: #4d4aa4;
+}
+
+.barbell-row-values {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.barbell-row-values small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .risk-list,
 .mover-list,
 .asset-list,

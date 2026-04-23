@@ -236,6 +236,26 @@ def init_db(conn: sqlite3.Connection) -> None:
             WHERE abs(cost_basis) <= 1e-9 AND abs(unit_price) > 1e-9
             """
         )
+    conn.execute(
+        """
+        UPDATE investment_items
+        SET amount = shares * unit_price * 100
+        WHERE lower(item_type) = 'option'
+          AND abs(shares) > 1e-9
+          AND abs(unit_price) > 1e-9
+          AND abs(amount - (shares * unit_price)) <= 1e-6
+        """
+    )
+    conn.execute(
+        """
+        UPDATE portfolio_items
+        SET amount = shares * unit_price * 100
+        WHERE lower(item_type) = 'option'
+          AND abs(shares) > 1e-9
+          AND abs(unit_price) > 1e-9
+          AND abs(amount - (shares * unit_price)) <= 1e-6
+        """
+    )
     money_item_columns = {
         row["name"]
         for row in conn.execute("PRAGMA table_info(money_items)").fetchall()
@@ -569,6 +589,13 @@ def is_share_based_type(item_type: str | None) -> bool:
     return value in {"Stock", "ETF", "Option", "Crypto", "Bond", "Fund"}
 
 
+def investment_contract_multiplier(item_type: str | None) -> float:
+    value = normalize_investment_type(item_type)
+    if value == "Option":
+        return 100.0
+    return 1.0
+
+
 def parse_legacy_generated_ledger_id(entry_id: str | None) -> tuple[str, str] | None:
     value = (entry_id or "").strip()
     parts = value.rsplit(":", 2)
@@ -713,7 +740,8 @@ def _save_snapshot_state(conn: sqlite3.Connection, state: dict[str, Any], snapsh
             unit_price = float(item.get("unitPrice") or item.get("unit_price") or 0)
             input_cost_basis = float(item.get("costBasis") or item.get("cost_basis") or 0)
             input_amount = float(item.get("amount") or 0)
-            computed_amount = shares * unit_price
+            multiplier = investment_contract_multiplier(item_type)
+            computed_amount = shares * unit_price * multiplier
             amount = computed_amount if is_share_based_type(item_type) and abs(computed_amount) > 1e-9 else input_amount
             if is_share_based_type(item_type):
                 cost_basis = input_cost_basis if abs(input_cost_basis) > 1e-9 else unit_price

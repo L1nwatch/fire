@@ -45,6 +45,40 @@ const totalCost = computed(() =>
 )
 const totalProfit = computed(() => round2(totalAll.value - totalCost.value))
 const totalProfitPercent = computed(() => (Math.abs(totalCost.value) > 1e-9 ? (totalProfit.value / totalCost.value) * 100 : 0))
+const barbellBreakdown = computed(() => {
+  const entries = portfolio.value.items
+    .map((item) => {
+      const sourceCurrency = normalizeCurrency(item.currency || portfolio.value.currency || displayCurrency.value)
+      const value = convertMoney(investmentItemAmount(item), sourceCurrency, displayCurrency.value)
+      return {
+        id: item.id,
+        label: item.name || item.symbol || 'Untitled',
+        value,
+        defensive: isDefensiveBarbellItem(item),
+      }
+    })
+    .filter((entry) => Math.abs(entry.value) > 1e-9)
+
+  const total = entries.reduce((sum, entry) => sum + entry.value, 0)
+  const defensiveEntries = entries.filter((entry) => entry.defensive).sort((a, b) => b.value - a.value)
+  const aggressiveEntries = entries.filter((entry) => !entry.defensive).sort((a, b) => b.value - a.value)
+  const defensiveTotal = defensiveEntries.reduce((sum, entry) => sum + entry.value, 0)
+  const aggressiveTotal = aggressiveEntries.reduce((sum, entry) => sum + entry.value, 0)
+
+  return {
+    total,
+    defensive: {
+      total: defensiveTotal,
+      share: total ? defensiveTotal / total : 0,
+      items: defensiveEntries.map((entry) => ({ ...entry, share: total ? entry.value / total : 0 })),
+    },
+    aggressive: {
+      total: aggressiveTotal,
+      share: total ? aggressiveTotal / total : 0,
+      items: aggressiveEntries.map((entry) => ({ ...entry, share: total ? entry.value / total : 0 })),
+    },
+  }
+})
 
 watch(
   portfolio,
@@ -303,6 +337,16 @@ function rowProfitClass(item: InvestmentItem) {
   return rowProfitInDisplay(item) >= 0 ? 'positive' : 'negative'
 }
 
+function isDefensiveBarbellItem(item: InvestmentItem) {
+  const normalizedType = String(item.type || '').trim().toLowerCase()
+  const normalizedName = String(item.name || '').trim().toLowerCase()
+  const normalizedSymbol = String(item.symbol || '').trim().toLowerCase()
+  if (normalizedType === 'cash') return true
+  if (normalizedName.includes('cbil')) return true
+  if (normalizedSymbol === 'cbil' || normalizedSymbol.startsWith('cbil.')) return true
+  return false
+}
+
 function hasMeaningfulItem(item: InvestmentItem) {
   if ((item.name || '').trim()) return true
   if ((item.symbol || '').trim()) return true
@@ -322,6 +366,11 @@ function formatNumber(value: number | undefined) {
 function formatPercent(value: number) {
   const prefix = value > 0 ? '+' : ''
   return `${prefix}${value.toFixed(2)}%`
+}
+
+function formatAllocation(value: number) {
+  const normalized = Number.isFinite(value) ? Math.max(0, value) : 0
+  return `${(normalized * 100).toFixed(1)}%`
 }
 </script>
 
@@ -367,6 +416,55 @@ function formatPercent(value: number) {
         <strong :class="{ positive: totalProfitPercent >= 0, negative: totalProfitPercent < 0 }">{{ formatPercent(totalProfitPercent) }}</strong>
       </div>
     </div>
+
+    <section class="panel barbell-panel" style="margin-top: 14px">
+      <div class="section-head">
+        <div>
+          <h2>Barbell Allocation</h2>
+          <span class="section-subtitle">Defensive side (Cash + CBIL) vs growth side (equities/options and others).</span>
+        </div>
+      </div>
+      <div class="asset-groups barbell-groups">
+        <div class="asset-group available barbell-defensive">
+          <div class="asset-group-head">
+            <div>
+              <span>Defensive</span>
+              <small>{{ formatAllocation(barbellBreakdown.defensive.share) }} of portfolio</small>
+            </div>
+            <strong>{{ formatMoney(barbellBreakdown.defensive.total, displayCurrency) }}</strong>
+          </div>
+          <div class="asset-list">
+            <div v-for="item in barbellBreakdown.defensive.items" :key="item.id" class="asset-row">
+              <span>{{ item.label }}</span>
+              <div class="barbell-row-values">
+                <strong>{{ formatMoney(item.value, displayCurrency) }}</strong>
+                <small>{{ formatAllocation(item.share) }}</small>
+              </div>
+            </div>
+            <div v-if="!barbellBreakdown.defensive.items.length" class="asset-row empty">No defensive holdings yet.</div>
+          </div>
+        </div>
+        <div class="asset-group barbell-aggressive">
+          <div class="asset-group-head">
+            <div>
+              <span>Growth / Options</span>
+              <small>{{ formatAllocation(barbellBreakdown.aggressive.share) }} of portfolio</small>
+            </div>
+            <strong>{{ formatMoney(barbellBreakdown.aggressive.total, displayCurrency) }}</strong>
+          </div>
+          <div class="asset-list">
+            <div v-for="item in barbellBreakdown.aggressive.items" :key="item.id" class="asset-row">
+              <span>{{ item.label }}</span>
+              <div class="barbell-row-values">
+                <strong>{{ formatMoney(item.value, displayCurrency) }}</strong>
+                <small>{{ formatAllocation(item.share) }}</small>
+              </div>
+            </div>
+            <div v-if="!barbellBreakdown.aggressive.items.length" class="asset-row empty">No growth/options holdings yet.</div>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <section class="panel" style="margin-top: 14px">
       <div class="section-head" style="margin-bottom: 10px">

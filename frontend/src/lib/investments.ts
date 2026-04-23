@@ -53,8 +53,9 @@ export function createInvestmentItem(item?: Partial<InvestmentItem>, defaultCurr
   const unitPrice = Number.isFinite(item?.unitPrice) ? Number(item?.unitPrice) : 0
   const amount = Number.isFinite(item?.amount) ? Number(item?.amount) : 0
   const isShareBased = isShareBasedType(type)
+  const multiplier = investmentContractMultiplier(type)
   const defaultCostBasis = isShareBased
-    ? (unitPrice || (shares ? amount / shares : 0))
+    ? (unitPrice || (shares ? amount / (shares * multiplier) : 0))
     : amount
   const inputCostBasis = Number.isFinite(item?.costBasis) ? Number(item?.costBasis) : NaN
   const normalizedCostBasis = Number.isFinite(inputCostBasis) && Math.abs(inputCostBasis) > 1e-9 ? inputCostBasis : defaultCostBasis
@@ -99,11 +100,17 @@ export function isShareBasedType(type?: string) {
   return normalizedType === 'Stock' || normalizedType === 'ETF' || normalizedType === 'Option' || normalizedType === 'Crypto' || normalizedType === 'Bond' || normalizedType === 'Fund'
 }
 
+export function investmentContractMultiplier(type?: string) {
+  const normalizedType = normalizeInvestmentType(type, 'Other')
+  if (normalizedType === 'Option') return 100
+  return 1
+}
+
 export function investmentItemAmount(item: InvestmentItem) {
   if (!isShareBasedType(item.type)) return Number.isFinite(item.amount) ? item.amount : 0
   const shares = Number.isFinite(item.shares) ? Number(item.shares) : 0
   const unitPrice = Number.isFinite(item.unitPrice) ? Number(item.unitPrice) : 0
-  const computed = shares * unitPrice
+  const computed = shares * unitPrice * investmentContractMultiplier(item.type)
   if (Math.abs(computed) > 1e-9) return computed
   return Number.isFinite(item.amount) ? item.amount : 0
 }
@@ -115,7 +122,7 @@ export function investmentItemCost(item: InvestmentItem) {
   }
   const shares = Number.isFinite(item.shares) ? Number(item.shares) : 0
   const costBasis = Number.isFinite(item.costBasis) ? Number(item.costBasis) : 0
-  const computed = shares * costBasis
+  const computed = shares * costBasis * investmentContractMultiplier(item.type)
   if (Math.abs(computed) > 1e-9) return computed
   if (Number.isFinite(item.amount) && Math.abs(Number(item.amount)) > 1e-9) return Number(item.amount)
   return investmentItemAmount(item)
