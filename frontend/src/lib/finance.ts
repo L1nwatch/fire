@@ -34,7 +34,7 @@ export interface DailyLedgerEntry {
 
 export const ledgerCategoryOptions = [
   'Income',
-  'Expense',
+  'Expense-Other',
   'Food',
   'Transport',
   'Shopping',
@@ -118,7 +118,7 @@ export const emptyMonth = (): FinancialMonth => {
 export const emptyLedgerEntry = (currency = 'CNY'): DailyLedgerEntry => ({
   id: crypto.randomUUID(),
   date: new Date().toISOString().slice(0, 10),
-  category: 'Expense',
+  category: 'Expense-Other',
   amount: 0,
   currency,
   notes: '',
@@ -344,6 +344,9 @@ export function normalizeIncomeCategory(category?: string): IncomeCategory {
 export function normalizeLedgerCategory(category?: string) {
   const value = (category || '').toLowerCase()
   if (value === 'income') return 'income'
+  if (value === 'expense-other') return 'expense-other'
+  if (value === 'expense other') return 'expense-other'
+  if (value === 'expense') return 'expense-other'
   if (value === 'food') return 'food'
   if (value === 'transport') return 'transport'
   if (value === 'shopping') return 'shopping'
@@ -352,7 +355,7 @@ export function normalizeLedgerCategory(category?: string) {
   if (value === 'utilities') return 'utilities'
   if (value === 'event') return 'event'
   if (value === 'rent') return 'rent'
-  return 'expense'
+  return 'expense-other'
 }
 
 function sumItems(items: MoneyItem[], targetCurrency: CurrencyCode) {

@@ -549,7 +549,11 @@ def infer_income_category(name: str) -> str:
 
 def normalize_ledger_category(category: str | None) -> str:
     value = (category or "").strip().lower()
-    if value in {"income", *LEDGER_EXPENSE_CATEGORIES, "expense"}:
+    if value == "income":
+        return value
+    if value in {"expense", "expense-other", "expense other"}:
+        return "expense-other"
+    if value in LEDGER_EXPENSE_CATEGORIES:
         return value
     return ""
 
