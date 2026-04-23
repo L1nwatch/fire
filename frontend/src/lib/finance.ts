@@ -1,9 +1,13 @@
 export type MoneySection = 'income' | 'expense' | 'asset' | 'liability'
+export type IncomeCategory = 'Active' | 'Passive'
+export const incomeCategoryOptions: IncomeCategory[] = ['Active', 'Passive']
 
 export interface MoneyItem {
   id: string
   name: string
   amount: number
+  currency: string
+  category?: string
   notes: string
 }
 
@@ -68,24 +72,42 @@ export interface FinanceSummary {
   savingsRate: number
 }
 
-export const emptyItem = (name = ''): MoneyItem => ({
+type CurrencyCode = 'CNY' | 'CAD' | 'USD'
+
+const cnyPerUnit: Record<CurrencyCode, number> = {
+  CNY: 1,
+  CAD: 5.25,
+  USD: 7.2,
+}
+
+export const emptyItem = (name = '', currency = 'CAD', category = ''): MoneyItem => ({
   id: crypto.randomUUID(),
   name,
   amount: 0,
+  currency,
+  category,
   notes: '',
 })
 
-export const emptyMonth = (): FinancialMonth => ({
-  id: crypto.randomUUID(),
-  label: new Date().toISOString().slice(0, 7),
-  currency: 'CAD',
-  passiveIncome: 0,
-  conclusion: '',
-  income: [emptyItem('Salary'), emptyItem('Interest')],
-  expenses: [emptyItem('Food'), emptyItem('Shopping'), emptyItem('Transportation'), emptyItem('Rent')],
-  assets: [emptyItem('Cash'), emptyItem('Brokerage'), emptyItem('Bank account')],
-  liabilities: [emptyItem('Credit card'), emptyItem('Rent payable')],
-})
+export const emptyMonth = (): FinancialMonth => {
+  const currency = 'CAD'
+  return {
+    id: crypto.randomUUID(),
+    label: new Date().toISOString().slice(0, 7),
+    currency,
+    passiveIncome: 0,
+    conclusion: '',
+    income: [emptyItem('Salary', currency, 'Active'), emptyItem('Interest', currency, 'Passive')],
+    expenses: [
+      emptyItem('Food', currency),
+      emptyItem('Shopping', currency),
+      emptyItem('Transportation', currency),
+      emptyItem('Rent', currency),
+    ],
+    assets: [emptyItem('Cash', currency), emptyItem('Brokerage', currency), emptyItem('Bank account', currency)],
+    liabilities: [emptyItem('Credit card', currency), emptyItem('Rent payable', currency)],
+  }
+}
 
 export const emptyLedgerEntry = (): DailyLedgerEntry => ({
   id: crypto.randomUUID(),
@@ -127,24 +149,36 @@ export const sampleFinanceState: FinanceState = {
       currency: 'CAD',
       passiveIncome: 656.92,
       conclusion: 'Recent month from the daily ledger format.',
-      income: [
-        { id: 'income-salary', name: 'Salary / scholarship', amount: 656.92, notes: '' },
-        { id: 'income-interest', name: 'Interest / passive income', amount: 0, notes: '' },
-      ],
-      expenses: [
-        { id: 'expense-food', name: 'Food', amount: -1225.47, notes: '' },
-        { id: 'expense-transport', name: 'Transportation', amount: -11402.29, notes: '' },
-        { id: 'expense-shopping', name: 'Shopping', amount: -597.66, notes: '' },
-        { id: 'expense-rent', name: 'Shipping / rent', amount: -10348.07, notes: '' },
-      ],
-      assets: [
-        { id: 'asset-cash', name: 'Cash and bank accounts', amount: 4200, notes: '' },
-        { id: 'asset-brokerage', name: 'Brokerage / investments', amount: 27180, notes: '' },
-      ],
-      liabilities: [
-        { id: 'liability-card', name: 'Credit card / bills', amount: -950, notes: '' },
-        { id: 'liability-rent', name: 'Rent payable', amount: -10348.07, notes: '' },
-      ],
+      income: withCurrency(
+        [
+          { id: 'income-salary', name: 'Salary / scholarship', amount: 656.92, category: 'Active', notes: '' },
+          { id: 'income-interest', name: 'Interest / passive income', amount: 0, category: 'Passive', notes: '' },
+        ],
+        'CAD',
+      ),
+      expenses: withCurrency(
+        [
+          { id: 'expense-food', name: 'Food', amount: -1225.47, notes: '' },
+          { id: 'expense-transport', name: 'Transportation', amount: -11402.29, notes: '' },
+          { id: 'expense-shopping', name: 'Shopping', amount: -597.66, notes: '' },
+          { id: 'expense-rent', name: 'Shipping / rent', amount: -10348.07, notes: '' },
+        ],
+        'CAD',
+      ),
+      assets: withCurrency(
+        [
+          { id: 'asset-cash', name: 'Cash and bank accounts', amount: 4200, notes: '' },
+          { id: 'asset-brokerage', name: 'Brokerage / investments', amount: 27180, notes: '' },
+        ],
+        'CAD',
+      ),
+      liabilities: withCurrency(
+        [
+          { id: 'liability-card', name: 'Credit card / bills', amount: -950, notes: '' },
+          { id: 'liability-rent', name: 'Rent payable', amount: -10348.07, notes: '' },
+        ],
+        'CAD',
+      ),
     },
     {
       id: 'month-2026-03',
@@ -152,20 +186,29 @@ export const sampleFinanceState: FinanceState = {
       currency: 'CAD',
       passiveIncome: 0,
       conclusion: 'Positive cash flow month.',
-      income: [
-        { id: 'income-2026-03-main', name: 'Salary / scholarship', amount: 25086.5, notes: '' },
-        { id: 'income-2026-03-other', name: 'Other income', amount: 0, notes: '' },
-      ],
-      expenses: [
-        { id: 'expense-2026-03-food', name: 'Food', amount: -3204.25, notes: '' },
-        { id: 'expense-2026-03-shopping', name: 'Shopping', amount: -810.54, notes: '' },
-        { id: 'expense-2026-03-rent', name: 'Shipping / rent', amount: -10557.97, notes: '' },
-      ],
-      assets: [
-        { id: 'asset-2026-03-cash', name: 'Cash and bank accounts', amount: 53800, notes: '' },
-        { id: 'asset-2026-03-invest', name: 'Brokerage / investments', amount: 28800, notes: '' },
-      ],
-      liabilities: [{ id: 'liability-2026-03-card', name: 'Credit card / bills', amount: -1800, notes: '' }],
+      income: withCurrency(
+        [
+          { id: 'income-2026-03-main', name: 'Salary / scholarship', amount: 25086.5, category: 'Active', notes: '' },
+          { id: 'income-2026-03-other', name: 'Other income', amount: 0, category: 'Active', notes: '' },
+        ],
+        'CAD',
+      ),
+      expenses: withCurrency(
+        [
+          { id: 'expense-2026-03-food', name: 'Food', amount: -3204.25, notes: '' },
+          { id: 'expense-2026-03-shopping', name: 'Shopping', amount: -810.54, notes: '' },
+          { id: 'expense-2026-03-rent', name: 'Shipping / rent', amount: -10557.97, notes: '' },
+        ],
+        'CAD',
+      ),
+      assets: withCurrency(
+        [
+          { id: 'asset-2026-03-cash', name: 'Cash and bank accounts', amount: 53800, notes: '' },
+          { id: 'asset-2026-03-invest', name: 'Brokerage / investments', amount: 28800, notes: '' },
+        ],
+        'CAD',
+      ),
+      liabilities: withCurrency([{ id: 'liability-2026-03-card', name: 'Credit card / bills', amount: -1800, notes: '' }], 'CAD'),
     },
   ],
   ledger: [
@@ -220,10 +263,15 @@ export const sampleFinanceState: FinanceState = {
 }
 
 export function summarizeMonth(month: FinancialMonth): FinanceSummary {
-  const totalIncome = sumItems(month.income)
-  const totalExpenses = sumItems(month.expenses)
-  const totalAssets = sumItems(month.assets)
-  const totalLiabilities = -Math.abs(sumItems(month.liabilities))
+  const monthCurrency = normalizeCurrencyCode(month.currency, 'CAD')
+  const totalIncome = sumItems(month.income, monthCurrency)
+  const passiveIncome = sumItems(
+    month.income.filter((item) => normalizeIncomeCategory(item.category) === 'Passive'),
+    monthCurrency,
+  )
+  const totalExpenses = sumItems(month.expenses, monthCurrency)
+  const totalAssets = sumItems(month.assets, monthCurrency)
+  const totalLiabilities = -Math.abs(sumItems(month.liabilities, monthCurrency))
   const monthlyCashFlow = roundMoney(totalIncome + totalExpenses)
   const netWorth = roundMoney(totalAssets + totalLiabilities)
 
@@ -234,7 +282,7 @@ export function summarizeMonth(month: FinancialMonth): FinanceSummary {
     totalAssets,
     totalLiabilities,
     netWorth,
-    passiveIncome: roundMoney(month.passiveIncome),
+    passiveIncome: roundMoney(passiveIncome),
     savingsRate: totalIncome ? roundPercent((monthlyCashFlow / totalIncome) * 100) : 0,
   }
 }
@@ -258,8 +306,33 @@ export function forecastExpense(entry: ForecastEntry) {
   return roundMoney(entry.tuition + entry.rent + entry.utilities + entry.food + entry.phone + entry.other)
 }
 
-function sumItems(items: MoneyItem[]) {
-  return roundMoney(items.reduce((sum, item) => sum + item.amount, 0))
+function withCurrency(
+  items: Array<{ id: string; name: string; amount: number; category?: string; notes: string }>,
+  currency: string,
+): MoneyItem[] {
+  return items.map((item) => ({ ...item, currency }))
+}
+
+export function normalizeIncomeCategory(category?: string): IncomeCategory {
+  return category === 'Passive' ? 'Passive' : 'Active'
+}
+
+function sumItems(items: MoneyItem[], targetCurrency: CurrencyCode) {
+  return roundMoney(
+    items.reduce((sum, item) => sum + convertCurrency(item.amount, item.currency || targetCurrency, targetCurrency), 0),
+  )
+}
+
+function convertCurrency(value: number, sourceCurrency: string, targetCurrency: CurrencyCode): number {
+  const source = normalizeCurrencyCode(sourceCurrency, targetCurrency)
+  if (source === targetCurrency) return Number.isFinite(value) ? value : 0
+  const valueInCny = (Number.isFinite(value) ? value : 0) * cnyPerUnit[source]
+  return valueInCny / cnyPerUnit[targetCurrency]
+}
+
+function normalizeCurrencyCode(currency: string, fallback: CurrencyCode): CurrencyCode {
+  if (currency === 'CAD' || currency === 'USD' || currency === 'CNY') return currency
+  return fallback
 }
 
 function roundMoney(value: number) {

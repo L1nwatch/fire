@@ -103,8 +103,8 @@ def import_report_sheet(conn: sqlite3.Connection, workbook: str, sheet: str, row
             conn.execute(
                 """
                 INSERT INTO money_items
-                  (id, month_id, section, name, amount, notes, position)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                  (id, month_id, section, name, amount, currency, category, notes, position)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     stable_id("item", workbook, sheet, section, row_index, name),
@@ -112,6 +112,8 @@ def import_report_sheet(conn: sqlite3.Connection, workbook: str, sheet: str, row
                     section,
                     name or "(blank)",
                     amount,
+                    "CNY",
+                    classify_income_category(name) if section == "income" else "",
                     "",
                     position,
                 ),
@@ -263,6 +265,33 @@ def classify_asset(name: str) -> str:
     if any(token in value for token in ["银行", "cash", "现金", "余额", "零钱", "朝朝宝", "理财", "支付宝", "微众", "transit"]):
         return "Available"
     return "Available"
+
+
+def classify_income_category(name: str) -> str:
+    value = name.lower()
+    if any(
+        token in value
+        for token in [
+            "interest",
+            "dividend",
+            "passive",
+            "rent",
+            "利息",
+            "分红",
+            "被动",
+            "租金",
+            "余额宝",
+            "招商银行理财",
+            "理财",
+            "ws-cash",
+            "ws-tfsa",
+            "ws-rrsp",
+            "ws-etf",
+            "ibkr",
+        ]
+    ):
+        return "Passive"
+    return "Active"
 
 
 def summary_value(rows: list[list[Any]], label: str) -> float:

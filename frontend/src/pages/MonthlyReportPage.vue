@@ -4,10 +4,20 @@ import { Delete, Plus } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import type { ECharts, EChartsOption } from 'echarts'
 import { fetchFinanceState, saveFinanceStateToDb } from '../lib/api'
+import { currencyOptions } from '../lib/currency'
 import { formatMoney } from '../lib/currency'
-import { emptyItem, emptyMonth, sampleFinanceState, summarizeMonth, type FinancialMonth, type MoneySection } from '../lib/finance'
+import {
+  emptyItem,
+  emptyMonth,
+  incomeCategoryOptions,
+  sampleFinanceState,
+  summarizeMonth,
+  type FinancialMonth,
+  type MoneySection,
+} from '../lib/finance'
 
 type MoneyItemKey = 'income' | 'expenses' | 'assets' | 'liabilities'
+const reportSections: MoneySection[] = ['income', 'expense', 'liability']
 
 const finance = ref(sampleFinanceState)
 const selectedMonthId = ref(finance.value.months[0]?.id ?? '')
@@ -43,6 +53,20 @@ const latestMonth = computed(() => months.value[0])
 const selectedMonth = computed<FinancialMonth>(() => months.value.find((month) => month.id === selectedMonthId.value) ?? latestMonth.value ?? emptyMonth())
 const selectedSummary = computed(() => summarizeMonth(selectedMonth.value))
 const latestSummary = computed(() => summarizeMonth(latestMonth.value ?? emptyMonth()))
+const latestActiveIncome = computed(() => activeIncomeValue(latestSummary.value.totalIncome, latestSummary.value.passiveIncome))
+const monthOptions = computed(() => {
+  const options = new Set<string>()
+  for (const month of finance.value.months) {
+    if (isMonthLabel(month.label)) options.add(month.label)
+  }
+  for (const label of buildMonthOptionRange(120, 24)) {
+    options.add(label)
+  }
+  if (isMonthLabel(selectedMonth.value.label)) {
+    options.add(selectedMonth.value.label)
+  }
+  return [...options].sort((a, b) => b.localeCompare(a))
+})
 const chartPoints = computed<MonthTrendPoint[]>(() =>
   [...finance.value.months]
     .sort((a, b) => a.label.localeCompare(b.label))
@@ -128,6 +152,15 @@ async function reloadFromDb() {
 
 function addMonth() {
   const month = emptyMonth()
+  const previous = latestMonth.value
+  if (previous) {
+    month.currency = previous.currency
+    month.income = previous.income.map((item) => ({
+      ...item,
+      id: crypto.randomUUID(),
+      category: item.category === 'Passive' ? 'Passive' : inferIncomeCategory(item.name),
+    }))
+  }
   finance.value.months.unshift(month)
   selectedMonthId.value = month.id
   showEditor.value = true
@@ -138,8 +171,13 @@ function editMonth(id: string) {
   showEditor.value = true
 }
 
-function editMonthRow(row: FinancialMonth) {
-  editMonth(row.id)
+function monthSummary(month: FinancialMonth) {
+  return summarizeMonth(month)
+}
+
+function activeIncomeForMonth(month: FinancialMonth) {
+  const summary = monthSummary(month)
+  return activeIncomeValue(summary.totalIncome, summary.passiveIncome)
 }
 
 function closeEditor() {
@@ -155,7 +193,8 @@ function deleteMonth() {
 }
 
 function addItem(section: MoneySection) {
-  selectedMonth.value[sectionKey(section)].push(emptyItem())
+  const category = section === 'income' ? 'Active' : ''
+  selectedMonth.value[sectionKey(section)].push(emptyItem('', selectedMonth.value.currency || 'CAD', category))
 }
 
 function removeItem(section: MoneySection, id: string) {
@@ -172,6 +211,42 @@ function sectionKey(section: MoneySection): MoneyItemKey {
   if (section === 'asset') return 'assets'
   if (section === 'liability') return 'liabilities'
   return 'income'
+}
+
+function isIncomeSection(section: MoneySection) {
+  return section === 'income'
+}
+
+function inferIncomeCategory(name: string) {
+  const value = (name || '').toLowerCase()
+  const passiveTokens = [
+    'interest',
+    'dividend',
+    'passive',
+    'rent',
+    '利息',
+    '分红',
+    '被动',
+    '租金',
+    '余额宝',
+    '招商银行理财',
+    '理财',
+    'ws-cash',
+    'ws-tfsa',
+    'ws-rrsp',
+    'ws-etf',
+    'ibkr',
+  ]
+  if (passiveTokens.some((token) => value.includes(token))) {
+    return 'Passive'
+  }
+  return 'Active'
+}
+
+function ensureIncomeCategory(section: MoneySection, row: { name: string; category?: string }) {
+  if (section !== 'income') return
+  if (row.category === 'Active' || row.category === 'Passive') return
+  row.category = inferIncomeCategory(row.name)
 }
 
 function initChart() {
@@ -317,6 +392,28 @@ function clampSavingsRate(value: number) {
   if (!Number.isFinite(value)) return 0
   return Math.min(savingsRateChartMax, Math.max(savingsRateChartMin, value))
 }
+
+function activeIncomeValue(totalIncome: number, passiveIncome: number) {
+  return Math.round((totalIncome - passiveIncome) * 100) / 100
+}
+
+function buildMonthOptionRange(backwardMonths: number, forwardMonths: number) {
+  const labels: string[] = []
+  const today = new Date()
+  const currentYear = today.getUTCFullYear()
+  const currentMonth = today.getUTCMonth() + 1
+  for (let offset = -forwardMonths; offset <= backwardMonths; offset += 1) {
+    const total = currentYear * 12 + (currentMonth - 1) - offset
+    const year = Math.floor(total / 12)
+    const month = (total % 12) + 1
+    labels.push(`${year}-${String(month).padStart(2, '0')}`)
+  }
+  return labels
+}
+
+function isMonthLabel(value: string) {
+  return /^\d{4}-\d{2}$/.test(value)
+}
 </script>
 
 <template>
@@ -324,8 +421,8 @@ function clampSavingsRate(value: number) {
     <div class="page-head">
       <div>
         <p class="eyebrow">Monthly Report</p>
-        <h1>Income, spending, assets, liabilities</h1>
-        <p>Track monthly cash flow, net worth, and report history from the workbook data.</p>
+        <h1>Income, spending, liabilities</h1>
+        <p>Track monthly cash flow and report history from the workbook data.</p>
       </div>
       <div class="actions">
         <el-button type="primary" :icon="Plus" @click="addMonth">Add Month</el-button>
@@ -348,12 +445,20 @@ function clampSavingsRate(value: number) {
           <span>{{ percent(chartStats.deltaPercent) }}</span>
         </div>
       </div>
-      <div ref="chartEl" class="trend-chart" role="img" aria-label="Monthly income spending and net worth trend"></div>
+      <div ref="chartEl" class="trend-chart" role="img" aria-label="Monthly income spending and savings rate trend"></div>
 
       <div class="asset-summary-strip monthly-summary-strip" v-if="latestMonth">
         <div class="asset-summary-item primary">
           <span>Total Income</span>
           <strong>{{ formatMoney(latestSummary.totalIncome, latestMonth.currency) }}</strong>
+        </div>
+        <div class="asset-summary-item">
+          <span>Active Income</span>
+          <strong>{{ formatMoney(latestActiveIncome, latestMonth.currency) }}</strong>
+        </div>
+        <div class="asset-summary-item">
+          <span>Passive Income</span>
+          <strong>{{ formatMoney(latestSummary.passiveIncome, latestMonth.currency) }}</strong>
         </div>
         <div class="asset-summary-item">
           <span>Total Spending</span>
@@ -377,31 +482,42 @@ function clampSavingsRate(value: number) {
         <h2>Report History</h2>
         <span>{{ months.length }} months</span>
       </div>
-      <el-table :data="pagedMonths" size="large" class="data-table" table-layout="fixed" @row-click="editMonthRow">
+      <el-table :data="pagedMonths" row-key="id" size="large" class="data-table report-history-table" table-layout="fixed">
         <el-table-column label="Month" min-width="130">
           <template #default="{ row }">
             <strong>{{ row.label }}</strong>
           </template>
         </el-table-column>
+        <el-table-column label="Currency" min-width="110" align="center">
+          <template #default="{ row }">
+            <strong>{{ row.currency }}</strong>
+          </template>
+        </el-table-column>
         <el-table-column label="Income" min-width="150" align="right">
-          <template #default="{ row }">{{ formatMoney(summarizeMonth(row).totalIncome, row.currency) }}</template>
+          <template #default="{ row }">{{ formatMoney(monthSummary(row).totalIncome, row.currency) }}</template>
+        </el-table-column>
+        <el-table-column label="Active Income" min-width="150" align="right">
+          <template #default="{ row }">{{ formatMoney(activeIncomeForMonth(row), row.currency) }}</template>
+        </el-table-column>
+        <el-table-column label="Passive Income" min-width="150" align="right">
+          <template #default="{ row }">{{ formatMoney(monthSummary(row).passiveIncome, row.currency) }}</template>
         </el-table-column>
         <el-table-column label="Spending" min-width="150" align="right">
           <template #default="{ row }">
-            <span class="negative">{{ formatMoney(summarizeMonth(row).totalExpenses, row.currency) }}</span>
+            <span class="negative">{{ formatMoney(monthSummary(row).totalExpenses, row.currency) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="Cash Flow" min-width="150" align="right">
           <template #default="{ row }">
-            <strong :class="{ positive: summarizeMonth(row).monthlyCashFlow >= 0, negative: summarizeMonth(row).monthlyCashFlow < 0 }">
-              {{ formatMoney(summarizeMonth(row).monthlyCashFlow, row.currency) }}
+            <strong :class="{ positive: monthSummary(row).monthlyCashFlow >= 0, negative: monthSummary(row).monthlyCashFlow < 0 }">
+              {{ formatMoney(monthSummary(row).monthlyCashFlow, row.currency) }}
             </strong>
           </template>
         </el-table-column>
         <el-table-column label="Savings Rate" min-width="130" align="right">
           <template #default="{ row }">
-            <strong :class="{ positive: summarizeMonth(row).savingsRate >= 0, negative: summarizeMonth(row).savingsRate < 0 }">
-              {{ percent(summarizeMonth(row).savingsRate) }}
+            <strong :class="{ positive: monthSummary(row).savingsRate >= 0, negative: monthSummary(row).savingsRate < 0 }">
+              {{ percent(monthSummary(row).savingsRate) }}
             </strong>
           </template>
         </el-table-column>
@@ -435,7 +551,11 @@ function clampSavingsRate(value: number) {
             <span>Monthly Report Editor</span>
             <strong>{{ selectedMonth.label }}</strong>
           </div>
-          <span>{{ formatMoney(selectedSummary.monthlyCashFlow, selectedMonth.currency) }}</span>
+          <div class="dialog-summary">
+            <span>Income {{ formatMoney(selectedSummary.totalIncome, selectedMonth.currency) }}</span>
+            <span>Spending {{ formatMoney(selectedSummary.totalExpenses, selectedMonth.currency) }}</span>
+            <span>Cash Flow {{ formatMoney(selectedSummary.monthlyCashFlow, selectedMonth.currency) }}</span>
+          </div>
         </div>
       </template>
 
@@ -443,27 +563,40 @@ function clampSavingsRate(value: number) {
         <div class="month-fields">
           <label>
             <span>Month</span>
-            <el-input v-model="selectedMonth.label" />
+            <el-select v-model="selectedMonth.label" filterable>
+              <el-option v-for="option in monthOptions" :key="option" :label="option" :value="option" />
+            </el-select>
           </label>
           <label>
-            <span>Currency</span>
-            <el-input v-model="selectedMonth.currency" />
-          </label>
-          <label>
-            <span>Passive income</span>
-            <el-input-number v-model="selectedMonth.passiveIncome" :precision="2" controls-position="right" />
+            <span>Passive income (auto)</span>
+            <strong>{{ formatMoney(selectedSummary.passiveIncome, selectedMonth.currency) }}</strong>
           </label>
         </div>
-        <el-input v-model="selectedMonth.conclusion" type="textarea" :rows="2" placeholder="Conclusion" />
 
-        <section v-for="section in ['income', 'expense', 'asset', 'liability']" :key="section" class="monthly-editor-section">
+        <section v-for="section in reportSections" :key="section" class="monthly-editor-section">
           <div class="section-head">
             <h2>{{ section }}</h2>
             <el-button :icon="Plus" @click="addItem(section as MoneySection)">Add Row</el-button>
           </div>
           <el-table :data="sectionItems(selectedMonth, section as MoneySection)" size="large" class="data-table" table-layout="fixed" max-height="320">
             <el-table-column label="Project" min-width="220">
-              <template #default="{ row }"><el-input v-model="row.name" /></template>
+              <template #default="{ row }">
+                <el-input v-model="row.name" @blur="ensureIncomeCategory(section as MoneySection, row)" />
+              </template>
+            </el-table-column>
+            <el-table-column v-if="isIncomeSection(section as MoneySection)" label="Type" min-width="130">
+              <template #default="{ row }">
+                <el-select v-model="row.category">
+                  <el-option v-for="category in incomeCategoryOptions" :key="category" :label="category" :value="category" />
+                </el-select>
+              </template>
+            </el-table-column>
+            <el-table-column label="Currency" min-width="120">
+              <template #default="{ row }">
+                <el-select v-model="row.currency">
+                  <el-option v-for="currency in currencyOptions" :key="currency" :label="currency" :value="currency" />
+                </el-select>
+              </template>
             </el-table-column>
             <el-table-column label="Amount" min-width="160" align="right">
               <template #default="{ row }"><el-input-number v-model="row.amount" :precision="2" controls-position="right" /></template>

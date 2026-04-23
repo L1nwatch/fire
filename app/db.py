@@ -8,6 +8,24 @@ from typing import Any
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT_DIR / "data"
 DB_PATH = DATA_DIR / "fire.sqlite3"
+PASSIVE_INCOME_TOKENS = (
+    "interest",
+    "dividend",
+    "passive",
+    "rent",
+    "利息",
+    "分红",
+    "被动",
+    "租金",
+    "余额宝",
+    "招商银行理财",
+    "理财",
+    "ws-cash",
+    "ws-tfsa",
+    "ws-rrsp",
+    "ws-etf",
+    "ibkr",
+)
 
 
 def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
@@ -37,6 +55,8 @@ def init_db(conn: sqlite3.Connection) -> None:
             section TEXT NOT NULL CHECK (section IN ('income', 'expense', 'asset', 'liability')),
             name TEXT NOT NULL,
             amount REAL NOT NULL DEFAULT 0,
+            currency TEXT NOT NULL DEFAULT 'CAD',
+            category TEXT NOT NULL DEFAULT '',
             notes TEXT NOT NULL DEFAULT '',
             position INTEGER NOT NULL DEFAULT 0
         );
@@ -128,6 +148,47 @@ def init_db(conn: sqlite3.Connection) -> None:
             )
             """
         )
+    money_item_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(money_items)").fetchall()
+    }
+    if "currency" not in money_item_columns:
+        conn.execute("ALTER TABLE money_items ADD COLUMN currency TEXT NOT NULL DEFAULT 'CAD'")
+        conn.execute(
+            """
+            UPDATE money_items
+            SET currency = (
+                SELECT financial_months.currency
+                FROM financial_months
+                WHERE financial_months.id = money_items.month_id
+            )
+            WHERE EXISTS (
+                SELECT 1
+                FROM financial_months
+                WHERE financial_months.id = money_items.month_id
+            )
+            """
+        )
+    if "category" not in money_item_columns:
+        conn.execute("ALTER TABLE money_items ADD COLUMN category TEXT NOT NULL DEFAULT ''")
+        conn.execute(
+            """
+            UPDATE money_items
+            SET category = CASE
+                WHEN section <> 'income' THEN ''
+                WHEN lower(name) LIKE '%interest%'
+                  OR lower(name) LIKE '%dividend%'
+                  OR lower(name) LIKE '%passive%'
+                  OR lower(name) LIKE '%rent%'
+                  OR name LIKE '%利息%'
+                  OR name LIKE '%分红%'
+                  OR name LIKE '%被动%'
+                  OR name LIKE '%租金%'
+                THEN 'Passive'
+                ELSE 'Active'
+            END
+            """
+        )
     conn.commit()
 
 
@@ -152,6 +213,14 @@ def load_finance_state(conn: sqlite3.Connection) -> dict[str, Any]:
                     "id": item["id"],
                     "name": item["name"],
                     "amount": item["amount"],
+                    "currency": item["currency"] or month["currency"],
+                    "category": (
+                        item["category"]
+                        if item["section"] == "income" and item["category"] in {"Active", "Passive"}
+                        else infer_income_category(item["name"])
+                    )
+                    if item["section"] == "income"
+                    else "",
                     "notes": item["notes"],
                 }
             )
@@ -238,8 +307,8 @@ def save_finance_state(conn: sqlite3.Connection, state: dict[str, Any]) -> None:
                 conn.execute(
                     """
                     INSERT INTO money_items
-                      (id, month_id, section, name, amount, notes, position)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                      (id, month_id, section, name, amount, currency, category, notes, position)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         item["id"],
@@ -247,6 +316,10 @@ def save_finance_state(conn: sqlite3.Connection, state: dict[str, Any]) -> None:
                         section,
                         item.get("name", ""),
                         float(item.get("amount") or 0),
+                        item.get("currency", month.get("currency", "CAD")),
+                        ("Passive" if item.get("category") == "Passive" else infer_income_category(item.get("name", "")))
+                        if section == "income"
+                        else "",
                         item.get("notes", ""),
                         position,
                     ),
@@ -307,6 +380,13 @@ def insert_raw_row(conn: sqlite3.Connection, workbook: str, sheet: str, row_inde
         "INSERT INTO raw_sheet_rows (workbook, sheet, row_index, cells_json) VALUES (?, ?, ?, ?)",
         (workbook, sheet, row_index, json.dumps(cells, ensure_ascii=False)),
     )
+
+
+def infer_income_category(name: str) -> str:
+    lower_name = (name or "").lower()
+    if any(token in lower_name for token in PASSIVE_INCOME_TOKENS):
+        return "Passive"
+    return "Active"
 
 
 def load_investment_state(conn: sqlite3.Connection) -> dict[str, Any]:

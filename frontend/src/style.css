@@ -508,7 +508,7 @@ body {
 }
 
 .monthly-summary-strip {
-  grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(140px, 1fr));
+  grid-template-columns: repeat(6, minmax(150px, 1fr));
 }
 
 .asset-summary-item {
@@ -573,6 +573,14 @@ body {
 
 .snapshot-history .el-table__row:hover > td.el-table__cell {
   background: #f2f0ff !important;
+}
+
+.report-history-table .el-table__row {
+  cursor: default;
+}
+
+.report-history-table .el-table__row:hover > td.el-table__cell {
+  background: #ffffff !important;
 }
 
 .history-pagination {
@@ -640,6 +648,24 @@ body {
   line-height: 1.2;
 }
 
+.dialog-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.dialog-summary span {
+  border: 1px solid #d6deec;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
 .snapshot-dialog .month-fields label {
   border: 1px solid #dde5ef;
   border-radius: 8px;
@@ -669,7 +695,7 @@ body {
 
 .month-fields {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
   margin-bottom: 12px;
 }
