@@ -272,7 +272,7 @@ function buildMonthDays(monthLabel: string): DayCard[] {
         <el-table :data="ledger" size="large" class="data-table holdings-table" table-layout="fixed" empty-text="No events yet">
           <el-table-column label="Date" min-width="170">
             <template #default="{ row }">
-              <el-date-picker v-model="row.date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" />
+              <span>{{ row.date }}</span>
             </template>
           </el-table-column>
           <el-table-column label="Category" min-width="170">
