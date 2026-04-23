@@ -47,11 +47,7 @@ const ledgerCurrency = computed(() => {
   return monthRecord?.currency ?? finance.value.months[0]?.currency ?? 'CNY'
 })
 
-const ledger = computed(() =>
-  monthEntries.value
-    .filter((entry) => entry.date === selectedDate.value)
-    .sort((a, b) => b.id.localeCompare(a.id)),
-)
+const ledger = computed(() => monthEntries.value.filter((entry) => entry.date === selectedDate.value))
 
 const monthSummary = computed(() => summarizeLedger(monthEntries.value, ledgerCurrency.value))
 const daySummary = computed(() => summarizeLedger(ledger.value, ledgerCurrency.value))
