@@ -26,18 +26,24 @@ export interface FinancialMonth {
 export interface DailyLedgerEntry {
   id: string
   date: string
-  income: number
-  expense: number
-  food: number
-  transport: number
-  shopping: number
-  insurance: number
-  telecom: number
-  utilities: number
-  event: number
-  rent: number
+  category: string
+  amount: number
+  currency: string
   notes: string
 }
+
+export const ledgerCategoryOptions = [
+  'Income',
+  'Expense',
+  'Food',
+  'Transport',
+  'Shopping',
+  'Insurance',
+  'Telecom',
+  'Utilities',
+  'Event',
+  'Rent',
+] as const
 
 export interface ForecastEntry {
   id: string
@@ -109,19 +115,12 @@ export const emptyMonth = (): FinancialMonth => {
   }
 }
 
-export const emptyLedgerEntry = (): DailyLedgerEntry => ({
+export const emptyLedgerEntry = (currency = 'CNY'): DailyLedgerEntry => ({
   id: crypto.randomUUID(),
   date: new Date().toISOString().slice(0, 10),
-  income: 0,
-  expense: 0,
-  food: 0,
-  transport: 0,
-  shopping: 0,
-  insurance: 0,
-  telecom: 0,
-  utilities: 0,
-  event: 0,
-  rent: 0,
+  category: 'Expense',
+  amount: 0,
+  currency,
   notes: '',
 })
 
@@ -215,31 +214,41 @@ export const sampleFinanceState: FinanceState = {
     {
       id: 'ledger-1',
       date: '2026-04-01',
-      income: 0,
-      expense: -670.53,
-      food: 0,
-      transport: -663.63,
-      shopping: 0,
-      insurance: 0,
-      telecom: -6.9,
-      utilities: 0,
-      event: 0,
-      rent: 0,
+      category: 'Transport',
+      amount: -663.63,
+      currency: 'CNY',
       notes: '',
     },
     {
       id: 'ledger-2',
+      date: '2026-04-01',
+      category: 'Telecom',
+      amount: -6.9,
+      currency: 'CNY',
+      notes: '',
+    },
+    {
+      id: 'ledger-3',
       date: '2026-04-02',
-      income: 656.92,
-      expense: -20906.02,
-      food: 0,
-      transport: -10557.95,
-      shopping: 0,
-      insurance: 0,
-      telecom: 0,
-      utilities: 0,
-      event: 0,
-      rent: -10348.07,
+      category: 'Income',
+      amount: 656.92,
+      currency: 'CNY',
+      notes: '',
+    },
+    {
+      id: 'ledger-4',
+      date: '2026-04-02',
+      category: 'Transport',
+      amount: -10557.95,
+      currency: 'CNY',
+      notes: '',
+    },
+    {
+      id: 'ledger-5',
+      date: '2026-04-02',
+      category: 'Rent',
+      amount: -10348.07,
+      currency: 'CNY',
       notes: '',
     },
   ],
@@ -287,14 +296,29 @@ export function summarizeMonth(month: FinancialMonth): FinanceSummary {
   }
 }
 
-export function summarizeLedger(entries: DailyLedgerEntry[]) {
+export function summarizeLedger(entries: DailyLedgerEntry[], targetCurrency = 'CNY') {
+  const currency = normalizeCurrencyCode(targetCurrency, 'CNY')
+  const sumBy = (category: string) =>
+    roundMoney(
+      entries
+        .filter((entry) => normalizeLedgerCategory(entry.category) === category)
+        .reduce((sum, entry) => sum + convertCurrency(entry.amount, entry.currency || currency, currency), 0),
+    )
+
+  const income = sumBy('income')
+  const expense = roundMoney(
+    entries
+      .filter((entry) => normalizeLedgerCategory(entry.category) !== 'income')
+      .reduce((sum, entry) => sum + convertCurrency(entry.amount, entry.currency || currency, currency), 0),
+  )
+
   return {
-    income: roundMoney(entries.reduce((sum, entry) => sum + entry.income, 0)),
-    expense: roundMoney(entries.reduce((sum, entry) => sum + entry.expense, 0)),
-    food: roundMoney(entries.reduce((sum, entry) => sum + entry.food, 0)),
-    transport: roundMoney(entries.reduce((sum, entry) => sum + entry.transport, 0)),
-    shopping: roundMoney(entries.reduce((sum, entry) => sum + entry.shopping, 0)),
-    rent: roundMoney(entries.reduce((sum, entry) => sum + entry.rent, 0)),
+    income,
+    expense,
+    food: sumBy('food'),
+    transport: sumBy('transport'),
+    shopping: sumBy('shopping'),
+    rent: sumBy('rent'),
   }
 }
 
@@ -315,6 +339,20 @@ function withCurrency(
 
 export function normalizeIncomeCategory(category?: string): IncomeCategory {
   return category === 'Passive' ? 'Passive' : 'Active'
+}
+
+export function normalizeLedgerCategory(category?: string) {
+  const value = (category || '').toLowerCase()
+  if (value === 'income') return 'income'
+  if (value === 'food') return 'food'
+  if (value === 'transport') return 'transport'
+  if (value === 'shopping') return 'shopping'
+  if (value === 'insurance') return 'insurance'
+  if (value === 'telecom') return 'telecom'
+  if (value === 'utilities') return 'utilities'
+  if (value === 'event') return 'event'
+  if (value === 'rent') return 'rent'
+  return 'expense'
 }
 
 function sumItems(items: MoneyItem[], targetCurrency: CurrencyCode) {

@@ -5,10 +5,22 @@ export const investmentCategoryOptions = [
   'Locked',
 ] as const
 
+export const investmentTypeOptions = [
+  'Cash',
+  'Stock',
+  'ETF',
+  'Option',
+  'Bond',
+  'Crypto',
+  'Fund',
+  'Other',
+] as const
+
 export interface InvestmentItem {
   id: string
   name: string
   account: string
+  type: string
   category: string
   amount: number
   currency?: string
@@ -36,6 +48,7 @@ export function createInvestmentItem(item?: Partial<InvestmentItem>, defaultCurr
     id: crypto.randomUUID(),
     name: item?.name ?? '',
     account: item?.account ?? '',
+    type: normalizeInvestmentType(item?.type, 'Cash'),
     category: normalizeInvestmentCategory(item?.category),
     amount: item?.amount ?? 0,
     currency: item?.currency ?? defaultCurrency,
@@ -47,6 +60,20 @@ export function normalizeInvestmentCategory(category?: string) {
   if (!category) return 'Available'
   if (category === 'Locked' || category === 'Retirement' || category === 'Housing Fund' || category === 'Insurance' || category === 'Deposit') return 'Locked'
   return 'Available'
+}
+
+export function normalizeInvestmentType(type?: string, fallback = 'Other') {
+  if (!type) return fallback
+  const value = String(type).trim().toLowerCase()
+  if (value === 'cash') return 'Cash'
+  if (value === 'stock') return 'Stock'
+  if (value === 'etf') return 'ETF'
+  if (value === 'option') return 'Option'
+  if (value === 'bond') return 'Bond'
+  if (value === 'crypto') return 'Crypto'
+  if (value === 'fund') return 'Fund'
+  if (value === 'other') return 'Other'
+  return String(type).trim() || fallback
 }
 
 export function createSnapshotFromPrevious(previous?: InvestmentSnapshot): InvestmentSnapshot {

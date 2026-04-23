@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import type { ECharts, EChartsOption } from 'echarts'
-import { fetchInvestmentState, saveInvestmentStateToDb } from '../lib/api'
+import { fetchInvestmentState, fetchPortfolioState, saveInvestmentStateToDb, savePortfolioStateToDb } from '../lib/api'
 import { currencyOptions, displayCurrency, formatMoney } from '../lib/currency'
 import {
   createInvestmentItem,
   createSnapshotFromPrevious,
   emptyInvestmentState,
   investmentCategoryOptions,
+  investmentTypeOptions,
   snapshotTotal,
   snapshotTotalByCategory,
   sortedSnapshots,
@@ -18,6 +20,7 @@ import {
   type InvestmentState,
 } from '../lib/investments'
 
+const route = useRoute()
 const investments = ref<InvestmentState>(emptyInvestmentState())
 const selectedSnapshotId = ref('')
 const loaded = ref(false)
@@ -29,6 +32,11 @@ const historyPage = ref(1)
 const historyPageSize = 10
 const totalDisplayMode = ref<'available' | 'locked' | 'all'>('available')
 let chart: ECharts | null = null
+
+const isPortfolioMode = computed(() => route.path.startsWith('/investment'))
+const titleNoun = computed(() => (isPortfolioMode.value ? 'investment' : 'asset'))
+const titleLabel = computed(() => `${titleNoun.value.charAt(0).toUpperCase()}${titleNoun.value.slice(1)}`)
+const totalLabel = computed(() => (isPortfolioMode.value ? 'All Investments' : 'All Assets'))
 
 const snapshots = computed(() => sortedSnapshots(investments.value))
 const pagedSnapshots = computed(() => {
@@ -62,10 +70,14 @@ watch(
   async (nextState) => {
     if (!loaded.value) return
     try {
-      await saveInvestmentStateToDb(nextState)
+      if (isPortfolioMode.value) {
+        await savePortfolioStateToDb(nextState)
+      } else {
+        await saveInvestmentStateToDb(nextState)
+      }
       saveError.value = ''
     } catch (error) {
-      saveError.value = error instanceof Error ? error.message : 'Failed to save investments'
+      saveError.value = error instanceof Error ? error.message : `Failed to save ${titleNoun.value}s`
     }
   },
   { deep: true },
@@ -86,6 +98,14 @@ onMounted(async () => {
   window.addEventListener('resize', resizeChart)
 })
 
+watch(
+  isPortfolioMode,
+  async () => {
+    await loadInvestments()
+  },
+  { flush: 'post' },
+)
+
 onBeforeUnmount(() => {
   window.removeEventListener('resize', resizeChart)
   chart?.dispose()
@@ -103,15 +123,13 @@ const displayModeLabel = computed(() => {
 })
 
 async function loadInvestments() {
+  loaded.value = false
   try {
-    investments.value = await fetchInvestmentState()
-    if (!investments.value.snapshots.length) {
-      investments.value.snapshots.push(createSnapshotFromPrevious())
-    }
+    investments.value = isPortfolioMode.value ? await fetchPortfolioState() : await fetchInvestmentState()
     selectedSnapshotId.value = snapshots.value[0]?.id ?? ''
     saveError.value = ''
   } catch (error) {
-    saveError.value = error instanceof Error ? error.message : 'Failed to load investments'
+    saveError.value = error instanceof Error ? error.message : `Failed to load ${titleNoun.value}s`
   } finally {
     loaded.value = true
   }
@@ -222,7 +240,7 @@ function renderChart() {
     series: [
       {
         type: 'line',
-        name: 'Assets',
+        name: totalLabel.value,
         data: points.map((point) => point.displayTotal),
         smooth: true,
         symbol: 'circle',
@@ -260,12 +278,12 @@ function percent(value: number) {
   <section class="page-shell wide">
     <div class="page-head">
       <div>
-        <p class="eyebrow">Assets</p>
-        <h1>Manual asset snapshots</h1>
-        <p>Record all assets on a date, copy the last snapshot forward, and track the trend.</p>
+        <p class="eyebrow">{{ titleLabel }}</p>
+        <h1>Manual {{ titleNoun }} snapshots</h1>
+        <p>Record all {{ titleNoun }}s on a date, copy the last snapshot forward, and track the trend.</p>
       </div>
       <div class="actions">
-        <el-button type="primary" :icon="Plus" @click="addSnapshot">New Asset Snapshot</el-button>
+        <el-button type="primary" :icon="Plus" @click="addSnapshot">New {{ titleLabel }} Snapshot</el-button>
       </div>
     </div>
 
@@ -275,7 +293,7 @@ function percent(value: number) {
       <section class="panel trend-panel">
         <div class="section-head">
           <div>
-            <h2>Asset Trend</h2>
+            <h2>{{ titleLabel }} Trend</h2>
             <span class="section-subtitle">
               {{ displayModeLabel }} /
               {{ activeChartPoint?.date ?? chartStats.latest?.date ?? 'No data' }}
@@ -297,7 +315,7 @@ function percent(value: number) {
             </div>
           </div>
         </div>
-        <div ref="chartEl" class="trend-chart" role="img" aria-label="Investment total trend"></div>
+        <div ref="chartEl" class="trend-chart" role="img" :aria-label="`${titleLabel} total trend`"></div>
         <div class="trend-labels">
           <span>{{ chartStats.first?.date ?? 'No data' }}</span>
           <strong>{{ activeChartPoint ? formatMoney(activeChartPoint.displayTotal, displayCurrency) : formatMoney(0, displayCurrency) }}</strong>
@@ -318,7 +336,7 @@ function percent(value: number) {
             <strong>{{ formatMoney(latestLockedTotal, displayCurrency) }}</strong>
           </div>
           <div class="asset-summary-item">
-            <span>All Assets</span>
+            <span>{{ totalLabel }}</span>
             <strong>{{ formatMoney(latestTotal, displayCurrency) }}</strong>
           </div>
           <div class="asset-summary-item">
@@ -359,7 +377,7 @@ function percent(value: number) {
           <template #default="{ row }">{{ row.items.length }}</template>
         </el-table-column>
         <el-table-column label="Update Info" min-width="260">
-          <template #default="{ row }">{{ row.notes || `${row.items.length} assets recorded` }}</template>
+          <template #default="{ row }">{{ row.notes || `${row.items.length} ${titleNoun}s recorded` }}</template>
         </el-table-column>
         <el-table-column label="" width="100" fixed="right" align="center">
           <template #default="{ row }">
@@ -408,13 +426,20 @@ function percent(value: number) {
         </div>
 
         <div class="actions snapshot-actions">
-          <el-button :icon="Plus" @click="addItem">Add Asset</el-button>
+          <el-button :icon="Plus" @click="addItem">Add {{ titleLabel }}</el-button>
         </div>
 
         <el-table :data="selectedSnapshot.items" size="large" class="data-table holdings-table" table-layout="fixed" max-height="56vh">
           <el-table-column label="Asset" min-width="190">
             <template #default="{ row }">
               <el-input v-model="row.name" placeholder="WS-TFSA, IBKR, Cash" />
+            </template>
+          </el-table-column>
+          <el-table-column label="Type" min-width="140">
+            <template #default="{ row }">
+              <el-select v-model="row.type" filterable allow-create default-first-option>
+                <el-option v-for="itemType in investmentTypeOptions" :key="itemType" :label="itemType" :value="itemType" />
+              </el-select>
             </template>
           </el-table-column>
           <el-table-column label="Category" min-width="150">
@@ -433,7 +458,7 @@ function percent(value: number) {
           </el-table-column>
           <el-table-column label="Amount" min-width="160" align="right">
             <template #default="{ row }">
-              <el-input-number v-model="row.amount" :precision="2" controls-position="right" />
+              <el-input-number v-model="row.amount" :precision="2" :controls="false" />
             </template>
           </el-table-column>
           <el-table-column label="Notes" min-width="220">

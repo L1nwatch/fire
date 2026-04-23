@@ -8,8 +8,9 @@ const router = createRouter({
     { path: '/monthly', name: 'monthly', component: () => import('./pages/MonthlyReportPage.vue') },
     { path: '/ledger', name: 'ledger', component: () => import('./pages/LedgerPage.vue') },
     { path: '/assets', name: 'assets', component: () => import('./pages/HoldingsPage.vue') },
+    { path: '/investment', name: 'investment', component: () => import('./pages/HoldingsPage.vue') },
     { path: '/holdings', redirect: '/assets' },
-    { path: '/forecast', name: 'forecast', component: () => import('./pages/ForecastPage.vue') },
+    { path: '/forecast', redirect: '/investment' },
   ],
 })
 

@@ -26,6 +26,7 @@ PASSIVE_INCOME_TOKENS = (
     "ws-etf",
     "ibkr",
 )
+LEDGER_EXPENSE_CATEGORIES = ("food", "transport", "shopping", "insurance", "telecom", "utilities", "event", "rent")
 
 
 def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
@@ -64,6 +65,9 @@ def init_db(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS daily_ledger (
             id TEXT PRIMARY KEY,
             date TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT '',
+            amount REAL NOT NULL DEFAULT 0,
+            currency TEXT NOT NULL DEFAULT 'CNY',
             income REAL NOT NULL DEFAULT 0,
             expense REAL NOT NULL DEFAULT 0,
             food REAL NOT NULL DEFAULT 0,
@@ -119,6 +123,27 @@ def init_db(conn: sqlite3.Connection) -> None:
             snapshot_id TEXT NOT NULL REFERENCES investment_snapshots(id) ON DELETE CASCADE,
             name TEXT NOT NULL,
             account TEXT NOT NULL DEFAULT '',
+            item_type TEXT NOT NULL DEFAULT '',
+            category TEXT NOT NULL DEFAULT '',
+            amount REAL NOT NULL DEFAULT 0,
+            currency TEXT NOT NULL DEFAULT 'CAD',
+            notes TEXT NOT NULL DEFAULT '',
+            position INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+            id TEXT PRIMARY KEY,
+            date TEXT NOT NULL UNIQUE,
+            currency TEXT NOT NULL DEFAULT 'CAD',
+            notes TEXT NOT NULL DEFAULT ''
+        );
+
+        CREATE TABLE IF NOT EXISTS portfolio_items (
+            id TEXT PRIMARY KEY,
+            snapshot_id TEXT NOT NULL REFERENCES portfolio_snapshots(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            account TEXT NOT NULL DEFAULT '',
+            item_type TEXT NOT NULL DEFAULT '',
             category TEXT NOT NULL DEFAULT '',
             amount REAL NOT NULL DEFAULT 0,
             currency TEXT NOT NULL DEFAULT 'CAD',
@@ -148,6 +173,31 @@ def init_db(conn: sqlite3.Connection) -> None:
             )
             """
         )
+    if "item_type" not in investment_item_columns:
+        conn.execute("ALTER TABLE investment_items ADD COLUMN item_type TEXT NOT NULL DEFAULT ''")
+    portfolio_item_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(portfolio_items)").fetchall()
+    }
+    if "currency" not in portfolio_item_columns:
+        conn.execute("ALTER TABLE portfolio_items ADD COLUMN currency TEXT NOT NULL DEFAULT 'CAD'")
+        conn.execute(
+            """
+            UPDATE portfolio_items
+            SET currency = (
+                SELECT portfolio_snapshots.currency
+                FROM portfolio_snapshots
+                WHERE portfolio_snapshots.id = portfolio_items.snapshot_id
+            )
+            WHERE EXISTS (
+                SELECT 1
+                FROM portfolio_snapshots
+                WHERE portfolio_snapshots.id = portfolio_items.snapshot_id
+            )
+            """
+        )
+    if "item_type" not in portfolio_item_columns:
+        conn.execute("ALTER TABLE portfolio_items ADD COLUMN item_type TEXT NOT NULL DEFAULT ''")
     money_item_columns = {
         row["name"]
         for row in conn.execute("PRAGMA table_info(money_items)").fetchall()
@@ -189,6 +239,16 @@ def init_db(conn: sqlite3.Connection) -> None:
             END
             """
         )
+    daily_ledger_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(daily_ledger)").fetchall()
+    }
+    if "category" not in daily_ledger_columns:
+        conn.execute("ALTER TABLE daily_ledger ADD COLUMN category TEXT NOT NULL DEFAULT ''")
+    if "amount" not in daily_ledger_columns:
+        conn.execute("ALTER TABLE daily_ledger ADD COLUMN amount REAL NOT NULL DEFAULT 0")
+    if "currency" not in daily_ledger_columns:
+        conn.execute("ALTER TABLE daily_ledger ADD COLUMN currency TEXT NOT NULL DEFAULT 'CNY'")
     conn.commit()
 
 
@@ -235,24 +295,45 @@ def load_finance_state(conn: sqlite3.Connection) -> dict[str, Any]:
             }
         )
 
-    ledger = [
-        {
-            "id": row["id"],
-            "date": row["date"],
-            "income": row["income"],
-            "expense": row["expense"],
-            "food": row["food"],
-            "transport": row["transport"],
-            "shopping": row["shopping"],
-            "insurance": row["insurance"],
-            "telecom": row["telecom"],
-            "utilities": row["utilities"],
-            "event": row["event"],
-            "rent": row["rent"],
-            "notes": row["notes"],
-        }
-        for row in conn.execute("SELECT * FROM daily_ledger ORDER BY date DESC, source_row DESC").fetchall()
-    ]
+    ledger_rows = conn.execute("SELECT * FROM daily_ledger ORDER BY date DESC, source_row DESC").fetchall()
+    legacy_generated_bases_with_detailed_expense: set[str] = set()
+    for row in ledger_rows:
+        parsed = parse_legacy_generated_ledger_id(row["id"])
+        category = normalize_ledger_category(row["category"])
+        if not parsed or category not in LEDGER_EXPENSE_CATEGORIES:
+            continue
+        base_id, parsed_category = parsed
+        if parsed_category == category:
+            legacy_generated_bases_with_detailed_expense.add(base_id)
+
+    ledger: list[dict[str, Any]] = []
+    for row in ledger_rows:
+        category = normalize_ledger_category(row["category"])
+        if category:
+            parsed = parse_legacy_generated_ledger_id(row["id"])
+            if category == "expense" and parsed:
+                base_id, parsed_category = parsed
+                if (
+                    parsed_category == "expense"
+                    and base_id in legacy_generated_bases_with_detailed_expense
+                ):
+                    continue
+            amount = float(row["amount"] or 0)
+            if amount == 0:
+                amount = ledger_event_amount_for_category(row, category)
+            ledger.append(
+                {
+                    "id": row["id"],
+                    "date": row["date"],
+                    "category": category.title(),
+                    "amount": amount,
+                    "currency": normalize_currency(row["currency"], "CNY"),
+                    "notes": row["notes"],
+                }
+            )
+            continue
+
+        ledger.extend(expand_legacy_ledger_events(row))
 
     forecast = [
         {
@@ -326,25 +407,44 @@ def save_finance_state(conn: sqlite3.Connection, state: dict[str, Any]) -> None:
                 )
 
     for row in state.get("ledger", []):
+        date_value = row.get("date", "")
+        if isinstance(date_value, dict):
+            date_value = str(date_value.get("date", ""))
+        else:
+            date_value = str(date_value or "")
+        category_value = row.get("category")
+        if isinstance(category_value, dict):
+            category_value = category_value.get("label") or category_value.get("value") or ""
+        category = normalize_ledger_category(str(category_value))
+        currency_value = row.get("currency", "CNY")
+        if isinstance(currency_value, dict):
+            currency_value = currency_value.get("label") or currency_value.get("value") or ""
+        currency = normalize_currency(str(currency_value), "CNY")
+        amount = float(row.get("amount") or 0)
+        income = amount if category == "income" else 0.0
+        expense = amount if category != "income" else 0.0
         conn.execute(
             """
             INSERT INTO daily_ledger
-              (id, date, income, expense, food, transport, shopping, insurance, telecom, utilities, event, rent, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              (id, date, category, amount, currency, income, expense, food, transport, shopping, insurance, telecom, utilities, event, rent, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 row["id"],
-                row["date"],
-                float(row.get("income") or 0),
-                float(row.get("expense") or 0),
-                float(row.get("food") or 0),
-                float(row.get("transport") or 0),
-                float(row.get("shopping") or 0),
-                float(row.get("insurance") or 0),
-                float(row.get("telecom") or 0),
-                float(row.get("utilities") or 0),
-                float(row.get("event") or 0),
-                float(row.get("rent") or 0),
+                date_value,
+                category.title() if category else "",
+                amount,
+                currency,
+                income,
+                expense,
+                amount if category == "food" else 0,
+                amount if category == "transport" else 0,
+                amount if category == "shopping" else 0,
+                amount if category == "insurance" else 0,
+                amount if category == "telecom" else 0,
+                amount if category == "utilities" else 0,
+                amount if category == "event" else 0,
+                amount if category == "rent" else 0,
                 row.get("notes", ""),
             ),
         )
@@ -389,12 +489,135 @@ def infer_income_category(name: str) -> str:
     return "Active"
 
 
+def normalize_ledger_category(category: str | None) -> str:
+    value = (category or "").strip().lower()
+    if value in {"income", *LEDGER_EXPENSE_CATEGORIES, "expense"}:
+        return value
+    return ""
+
+
+def normalize_currency(currency: str | None, fallback: str = "CNY") -> str:
+    value = (currency or "").strip().upper()
+    if value in {"CNY", "CAD", "USD"}:
+        return value
+    return fallback
+
+
+def normalize_investment_type(item_type: str | None, name: str | None = "") -> str:
+    value = (item_type or "").strip().lower()
+    if value in {"cash", "stock", "etf", "option", "bond", "crypto", "fund", "other"}:
+        return value.upper() if value == "etf" else value.title()
+
+    name_value = (name or "").strip().lower()
+    if any(token in name_value for token in ("cash", "bank", "savings", "wallet")):
+        return "Cash"
+    if any(token in name_value for token in ("etf", "index")):
+        return "ETF"
+    if any(token in name_value for token in ("option", "call", "put")):
+        return "Option"
+    if any(token in name_value for token in ("bond", "treasury")):
+        return "Bond"
+    if any(token in name_value for token in ("crypto", "btc", "eth")):
+        return "Crypto"
+    if any(token in name_value for token in ("fund", "mutual")):
+        return "Fund"
+    if any(token in name_value for token in ("stock", "equity", "share")):
+        return "Stock"
+    return "Other"
+
+
+def parse_legacy_generated_ledger_id(entry_id: str | None) -> tuple[str, str] | None:
+    value = (entry_id or "").strip()
+    parts = value.rsplit(":", 2)
+    if len(parts) != 3:
+        return None
+    base_id, category, index = parts
+    if not base_id or not index.isdigit():
+        return None
+    parsed_category = normalize_ledger_category(category)
+    if not parsed_category:
+        return None
+    return base_id, parsed_category
+
+
+def ledger_event_amount_for_category(row: sqlite3.Row, category: str) -> float:
+    if category == "income":
+        return float(row["income"] or 0)
+    if category == "expense":
+        return float(row["expense"] or 0)
+    if category in LEDGER_EXPENSE_CATEGORIES:
+        return float(row[category] or 0)
+    return 0.0
+
+
+def expand_legacy_ledger_events(row: sqlite3.Row) -> list[dict[str, Any]]:
+    events: list[tuple[str, float]] = []
+    income_amount = float(row["income"] or 0)
+    if abs(income_amount) > 1e-9:
+        events.append(("income", income_amount))
+
+    detailed_expense_sum = 0.0
+    for category in LEDGER_EXPENSE_CATEGORIES:
+        amount = float(row[category] or 0)
+        if abs(amount) > 1e-9:
+            events.append((category, amount))
+            detailed_expense_sum += amount
+
+    expense_amount = float(row["expense"] or 0)
+    if abs(detailed_expense_sum) <= 1e-9 and abs(expense_amount) > 1e-9:
+        events.append(("expense", expense_amount))
+
+    if not events:
+        return []
+
+    if len(events) == 1:
+        category, amount = events[0]
+        return [
+            {
+                "id": row["id"],
+                "date": row["date"],
+                "category": category.title(),
+                "amount": amount,
+                "currency": normalize_currency(row["currency"], "CNY"),
+                "notes": row["notes"],
+            }
+        ]
+
+    return [
+        {
+            "id": f'{row["id"]}:{category}:{index}',
+            "date": row["date"],
+            "category": category.title(),
+            "amount": amount,
+            "currency": normalize_currency(row["currency"], "CNY"),
+            "notes": row["notes"],
+        }
+        for index, (category, amount) in enumerate(events, start=1)
+    ]
+
+
 def load_investment_state(conn: sqlite3.Connection) -> dict[str, Any]:
+    return _load_snapshot_state(conn, "investment_snapshots", "investment_items")
+
+
+def save_investment_state(conn: sqlite3.Connection, state: dict[str, Any]) -> None:
+    _save_snapshot_state(conn, state, "investment_snapshots", "investment_items")
+
+
+def load_portfolio_state(conn: sqlite3.Connection) -> dict[str, Any]:
+    return _load_snapshot_state(conn, "portfolio_snapshots", "portfolio_items")
+
+
+def save_portfolio_state(conn: sqlite3.Connection, state: dict[str, Any]) -> None:
+    _save_snapshot_state(conn, state, "portfolio_snapshots", "portfolio_items")
+
+
+def _load_snapshot_state(conn: sqlite3.Connection, snapshot_table: str, item_table: str) -> dict[str, Any]:
     snapshots = []
-    rows = conn.execute("SELECT * FROM investment_snapshots ORDER BY date DESC").fetchall()
+    rows = conn.execute(f"SELECT * FROM {snapshot_table} ORDER BY date DESC").fetchall()
     for snapshot in rows:
         items = conn.execute(
-            "SELECT * FROM investment_items WHERE snapshot_id = ? ORDER BY position, name",
+            f"SELECT * FROM {item_table} WHERE snapshot_id = ? ORDER BY position, name",
             (snapshot["id"],),
         ).fetchall()
         snapshots.append(
@@ -408,6 +631,7 @@ def load_investment_state(conn: sqlite3.Connection) -> dict[str, Any]:
                         "id": item["id"],
                         "name": item["name"],
                         "account": item["account"],
+                        "type": normalize_investment_type(item["item_type"], item["name"]),
                         "category": item["category"],
                         "amount": item["amount"],
                         "currency": item["currency"] or snapshot["currency"],
@@ -420,13 +644,13 @@ def load_investment_state(conn: sqlite3.Connection) -> dict[str, Any]:
     return {"snapshots": snapshots}
 
 
-def save_investment_state(conn: sqlite3.Connection, state: dict[str, Any]) -> None:
-    conn.execute("DELETE FROM investment_items")
-    conn.execute("DELETE FROM investment_snapshots")
+def _save_snapshot_state(conn: sqlite3.Connection, state: dict[str, Any], snapshot_table: str, item_table: str) -> None:
+    conn.execute(f"DELETE FROM {item_table}")
+    conn.execute(f"DELETE FROM {snapshot_table}")
     for snapshot in state.get("snapshots", []):
         conn.execute(
-            """
-            INSERT INTO investment_snapshots (id, date, currency, notes)
+            f"""
+            INSERT INTO {snapshot_table} (id, date, currency, notes)
             VALUES (?, ?, ?, ?)
             """,
             (
@@ -438,16 +662,17 @@ def save_investment_state(conn: sqlite3.Connection, state: dict[str, Any]) -> No
         )
         for position, item in enumerate(snapshot.get("items", [])):
             conn.execute(
-                """
-                INSERT INTO investment_items
-                  (id, snapshot_id, name, account, category, amount, currency, notes, position)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                f"""
+                INSERT INTO {item_table}
+                  (id, snapshot_id, name, account, item_type, category, amount, currency, notes, position)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     item["id"],
                     snapshot["id"],
                     item.get("name", ""),
                     item.get("account", ""),
+                    normalize_investment_type(item.get("type", ""), item.get("name", "")),
                     item.get("category", ""),
                     float(item.get("amount") or 0),
                     item.get("currency") or snapshot.get("currency", "CAD"),

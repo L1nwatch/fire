@@ -362,8 +362,96 @@ body {
   overflow: hidden;
 }
 
+.ledger-calendar {
+  margin-bottom: 14px;
+}
+
+.ledger-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ledger-day {
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+  background: #fbfcff;
+  min-height: 118px;
+  padding: 10px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+
+.ledger-day:hover {
+  border-color: #b5c7e8;
+  background: #f5f8ff;
+}
+
+.ledger-day.active {
+  border-color: #7ea5df;
+  box-shadow: 0 0 0 1px rgba(126, 165, 223, 0.18);
+  background: #eef4ff;
+}
+
+.ledger-day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ledger-day-head strong {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.ledger-day-head small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ledger-day-stats {
+  display: grid;
+  gap: 4px;
+}
+
+.ledger-day-stats span {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.ledger-day-stats em {
+  font-style: normal;
+  color: var(--muted);
+}
+
+.ledger-day-footer {
+  margin-top: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .month-select {
   width: 160px;
+}
+
+.ledger-editor-dialog .el-dialog__body {
+  padding-top: 8px;
+}
+
+.ledger-editor-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin: 4px 0 10px;
 }
 
 .workbook-layout {
@@ -711,6 +799,15 @@ body {
   width: 100%;
 }
 
+.el-input-number__increase,
+.el-input-number__decrease {
+  display: none !important;
+}
+
+.el-input-number.is-controls-right .el-input__wrapper {
+  padding-right: 11px;
+}
+
 .holdings-table :deep(.el-select) {
   width: 100%;
 }
@@ -775,6 +872,10 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .ledger-calendar-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .dialog-title {
     align-items: flex-start;
     flex-direction: column;
@@ -793,5 +894,11 @@ body {
 
   .actions {
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .ledger-calendar-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

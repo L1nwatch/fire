@@ -599,7 +599,7 @@ function isMonthLabel(value: string) {
               </template>
             </el-table-column>
             <el-table-column label="Amount" min-width="160" align="right">
-              <template #default="{ row }"><el-input-number v-model="row.amount" :precision="2" controls-position="right" /></template>
+              <template #default="{ row }"><el-input-number v-model="row.amount" :precision="2" :controls="false" /></template>
             </el-table-column>
             <el-table-column label="Notes" min-width="240">
               <template #default="{ row }"><el-input v-model="row.notes" /></template>

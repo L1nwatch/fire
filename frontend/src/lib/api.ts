@@ -40,3 +40,22 @@ export async function saveInvestmentStateToDb(state: InvestmentState): Promise<v
     throw new Error(`Failed to save investments: ${response.status}`)
   }
 }
+
+export async function fetchPortfolioState(): Promise<InvestmentState> {
+  const response = await fetch(`${apiBase}/api/portfolio`)
+  if (!response.ok) {
+    throw new Error(`Failed to load portfolio: ${response.status}`)
+  }
+  return (await response.json()) as InvestmentState
+}
+
+export async function savePortfolioStateToDb(state: InvestmentState): Promise<void> {
+  const response = await fetch(`${apiBase}/api/portfolio`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(state),
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to save portfolio: ${response.status}`)
+  }
+}

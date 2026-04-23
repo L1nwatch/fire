@@ -9,7 +9,7 @@ const activePath = computed(() => {
   if (route.path.startsWith('/monthly')) return '/monthly'
   if (route.path.startsWith('/ledger')) return '/ledger'
   if (route.path.startsWith('/assets') || route.path.startsWith('/holdings')) return '/assets'
-  if (route.path.startsWith('/forecast')) return '/forecast'
+  if (route.path.startsWith('/investment') || route.path.startsWith('/forecast')) return '/investment'
   return '/dashboard'
 })
 </script>
@@ -26,7 +26,7 @@ const activePath = computed(() => {
         <el-menu-item index="/monthly">Monthly Report</el-menu-item>
         <el-menu-item index="/ledger">Daily Ledger</el-menu-item>
         <el-menu-item index="/assets">Assets</el-menu-item>
-        <el-menu-item index="/forecast">Forecast</el-menu-item>
+        <el-menu-item index="/investment">Investment</el-menu-item>
       </el-menu>
     </aside>
 
