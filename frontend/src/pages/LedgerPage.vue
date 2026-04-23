@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import { fetchFinanceState, saveFinanceStateToDb } from '../lib/api'
 import { currencyOptions, formatMoney } from '../lib/currency'
@@ -20,6 +21,7 @@ const selectedDate = ref('')
 const editorVisible = ref(false)
 const loaded = ref(false)
 const saveError = ref('')
+const route = useRoute()
 
 const monthOptions = computed(() => {
   const options = new Set<string>()
@@ -100,10 +102,25 @@ onMounted(async () => {
   } catch (error) {
     saveError.value = error instanceof Error ? error.message : 'Failed to load finance database'
   } finally {
-    if (!selectedMonth.value) selectedMonth.value = monthOptions.value[0] ?? currentMonthLabel()
+    const routeSelectedMonth = queryMonthLabel()
+    if (routeSelectedMonth && monthOptions.value.includes(routeSelectedMonth)) {
+      selectedMonth.value = routeSelectedMonth
+    } else if (!selectedMonth.value) {
+      selectedMonth.value = monthOptions.value[0] ?? currentMonthLabel()
+    }
     loaded.value = true
   }
 })
+
+watch(
+  () => route.query.month,
+  () => {
+    const routeSelectedMonth = queryMonthLabel()
+    if (!routeSelectedMonth) return
+    if (!monthOptions.value.includes(routeSelectedMonth)) return
+    selectedMonth.value = routeSelectedMonth
+  },
+)
 
 function addEntry(targetDate = selectedDate.value) {
   const date = targetDate || `${selectedMonth.value || currentMonthLabel()}-01`
@@ -126,6 +143,13 @@ function ledgerMonth(date: string) {
   const match = /^(\d{4})-(\d{2})/.exec(date ?? '')
   if (!match) return ''
   return `${match[1]}-${match[2]}`
+}
+
+function queryMonthLabel() {
+  const raw = route.query.month
+  const month = Array.isArray(raw) ? raw[0] : raw
+  if (typeof month !== 'string') return ''
+  return /^\d{4}-\d{2}$/.test(month) ? month : ''
 }
 
 function currentMonthLabel() {

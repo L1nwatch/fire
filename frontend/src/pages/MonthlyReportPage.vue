@@ -1,29 +1,21 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Delete, Plus } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import type { ECharts, EChartsOption } from 'echarts'
 import { fetchFinanceState, saveFinanceStateToDb } from '../lib/api'
-import { currencyOptions } from '../lib/currency'
 import { formatMoney } from '../lib/currency'
 import {
-  emptyItem,
   emptyMonth,
-  incomeCategoryOptions,
   sampleFinanceState,
+  summarizeLedger,
   summarizeMonth,
+  type FinanceSummary,
   type FinancialMonth,
-  type MoneySection,
 } from '../lib/finance'
 
-type MoneyItemKey = 'income' | 'expenses' | 'assets' | 'liabilities'
-const reportSections: MoneySection[] = ['income', 'expense', 'liability']
-
 const finance = ref(sampleFinanceState)
-const selectedMonthId = ref(finance.value.months[0]?.id ?? '')
 const loaded = ref(false)
 const saveError = ref('')
-const showEditor = ref(false)
 const chartEl = ref<HTMLDivElement | null>(null)
 const activeChartPoint = ref<MonthTrendPoint | null>(null)
 const historyPage = ref(1)
@@ -50,23 +42,8 @@ const pagedMonths = computed(() => {
   return months.value.slice(start, start + historyPageSize)
 })
 const latestMonth = computed(() => months.value[0])
-const selectedMonth = computed<FinancialMonth>(() => months.value.find((month) => month.id === selectedMonthId.value) ?? latestMonth.value ?? emptyMonth())
-const selectedSummary = computed(() => summarizeMonth(selectedMonth.value))
 const latestSummary = computed(() => summarizeMonth(latestMonth.value ?? emptyMonth()))
 const latestActiveIncome = computed(() => activeIncomeValue(latestSummary.value.totalIncome, latestSummary.value.passiveIncome))
-const monthOptions = computed(() => {
-  const options = new Set<string>()
-  for (const month of finance.value.months) {
-    if (isMonthLabel(month.label)) options.add(month.label)
-  }
-  for (const label of buildMonthOptionRange(120, 24)) {
-    options.add(label)
-  }
-  if (isMonthLabel(selectedMonth.value.label)) {
-    options.add(selectedMonth.value.label)
-  }
-  return [...options].sort((a, b) => b.localeCompare(a))
-})
 const chartPoints = computed<MonthTrendPoint[]>(() =>
   [...finance.value.months]
     .sort((a, b) => a.label.localeCompare(b.label))
@@ -141,7 +118,6 @@ onBeforeUnmount(() => {
 async function reloadFromDb() {
   try {
     finance.value = await fetchFinanceState()
-    selectedMonthId.value = months.value[0]?.id ?? ''
     loaded.value = true
     saveError.value = ''
   } catch (error) {
@@ -150,29 +126,23 @@ async function reloadFromDb() {
   }
 }
 
-function addMonth() {
-  const month = emptyMonth()
-  const previous = latestMonth.value
-  if (previous) {
-    month.currency = previous.currency
-    month.income = previous.income.map((item) => ({
-      ...item,
-      id: crypto.randomUUID(),
-      category: item.category === 'Passive' ? 'Passive' : inferIncomeCategory(item.name),
-    }))
-  }
-  finance.value.months.unshift(month)
-  selectedMonthId.value = month.id
-  showEditor.value = true
-}
-
-function editMonth(id: string) {
-  selectedMonthId.value = id
-  showEditor.value = true
-}
-
 function monthSummary(month: FinancialMonth) {
-  return summarizeMonth(month)
+  const baseSummary = summarizeMonth(month)
+  const ledgerSummary = summarizeLedger(
+    finance.value.ledger.filter((entry) => ledgerMonth(entry.date) === month.label),
+    month.currency,
+  )
+  const totalIncome = roundMoney(ledgerSummary.income)
+  const totalExpenses = roundMoney(ledgerSummary.expense)
+  const monthlyCashFlow = roundMoney(totalIncome + totalExpenses)
+  const savingsRate = totalIncome ? roundPercent((monthlyCashFlow / totalIncome) * 100) : 0
+  return {
+    ...baseSummary,
+    totalIncome,
+    totalExpenses,
+    monthlyCashFlow,
+    savingsRate,
+  } satisfies FinanceSummary
 }
 
 function activeIncomeForMonth(month: FinancialMonth) {
@@ -180,73 +150,10 @@ function activeIncomeForMonth(month: FinancialMonth) {
   return activeIncomeValue(summary.totalIncome, summary.passiveIncome)
 }
 
-function closeEditor() {
-  showEditor.value = false
-}
-
-function deleteMonth() {
-  if (!selectedMonth.value || finance.value.months.length <= 1) return
-  const id = selectedMonth.value.id
-  finance.value.months = finance.value.months.filter((month) => month.id !== id)
-  selectedMonthId.value = months.value[0]?.id ?? ''
-  showEditor.value = false
-}
-
-function addItem(section: MoneySection) {
-  const category = section === 'income' ? 'Active' : ''
-  selectedMonth.value[sectionKey(section)].push(emptyItem('', selectedMonth.value.currency || 'CAD', category))
-}
-
-function removeItem(section: MoneySection, id: string) {
-  const key = sectionKey(section)
-  selectedMonth.value[key] = selectedMonth.value[key].filter((item) => item.id !== id)
-}
-
-function sectionItems(month: FinancialMonth, section: MoneySection) {
-  return month[sectionKey(section)]
-}
-
-function sectionKey(section: MoneySection): MoneyItemKey {
-  if (section === 'expense') return 'expenses'
-  if (section === 'asset') return 'assets'
-  if (section === 'liability') return 'liabilities'
-  return 'income'
-}
-
-function isIncomeSection(section: MoneySection) {
-  return section === 'income'
-}
-
-function inferIncomeCategory(name: string) {
-  const value = (name || '').toLowerCase()
-  const passiveTokens = [
-    'interest',
-    'dividend',
-    'passive',
-    'rent',
-    '利息',
-    '分红',
-    '被动',
-    '租金',
-    '余额宝',
-    '招商银行理财',
-    '理财',
-    'ws-cash',
-    'ws-tfsa',
-    'ws-rrsp',
-    'ws-etf',
-    'ibkr',
-  ]
-  if (passiveTokens.some((token) => value.includes(token))) {
-    return 'Passive'
-  }
-  return 'Active'
-}
-
-function ensureIncomeCategory(section: MoneySection, row: { name: string; category?: string }) {
-  if (section !== 'income') return
-  if (row.category === 'Active' || row.category === 'Passive') return
-  row.category = inferIncomeCategory(row.name)
+function ledgerMonth(date: string) {
+  const match = /^(\d{4})-(\d{2})/.exec(date ?? '')
+  if (!match) return ''
+  return `${match[1]}-${match[2]}`
 }
 
 function initChart() {
@@ -397,22 +304,12 @@ function activeIncomeValue(totalIncome: number, passiveIncome: number) {
   return Math.round((totalIncome - passiveIncome) * 100) / 100
 }
 
-function buildMonthOptionRange(backwardMonths: number, forwardMonths: number) {
-  const labels: string[] = []
-  const today = new Date()
-  const currentYear = today.getUTCFullYear()
-  const currentMonth = today.getUTCMonth() + 1
-  for (let offset = -forwardMonths; offset <= backwardMonths; offset += 1) {
-    const total = currentYear * 12 + (currentMonth - 1) - offset
-    const year = Math.floor(total / 12)
-    const month = (total % 12) + 1
-    labels.push(`${year}-${String(month).padStart(2, '0')}`)
-  }
-  return labels
+function roundMoney(value: number) {
+  return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
 }
 
-function isMonthLabel(value: string) {
-  return /^\d{4}-\d{2}$/.test(value)
+function roundPercent(value: number) {
+  return Math.round((Number.isFinite(value) ? value : 0) * 10) / 10
 }
 </script>
 
@@ -421,11 +318,8 @@ function isMonthLabel(value: string) {
     <div class="page-head">
       <div>
         <p class="eyebrow">Monthly Report</p>
-        <h1>Income, spending, liabilities</h1>
-        <p>Track monthly cash flow and report history from the workbook data.</p>
-      </div>
-      <div class="actions">
-        <el-button type="primary" :icon="Plus" @click="addMonth">Add Month</el-button>
+        <h1>Income and spending</h1>
+        <p>Monthly summary is derived from Daily Ledger records.</p>
       </div>
     </div>
 
@@ -521,9 +415,9 @@ function isMonthLabel(value: string) {
             </strong>
           </template>
         </el-table-column>
-        <el-table-column label="" width="100" fixed="right" align="center">
+        <el-table-column label="" width="130" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button @click.stop="editMonth(row.id)">Edit</el-button>
+            <el-button tag="router-link" :to="{ name: 'ledger', query: { month: row.label } }">Open Ledger</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -536,87 +430,5 @@ function isMonthLabel(value: string) {
         :total="months.length"
       />
     </section>
-
-    <el-dialog
-      v-model="showEditor"
-      class="snapshot-dialog monthly-dialog"
-      width="min(1180px, calc(100vw - 32px))"
-      top="5vh"
-      destroy-on-close
-      append-to-body
-    >
-      <template #header>
-        <div class="dialog-title" v-if="selectedMonth">
-          <div>
-            <span>Monthly Report Editor</span>
-            <strong>{{ selectedMonth.label }}</strong>
-          </div>
-          <div class="dialog-summary">
-            <span>Income {{ formatMoney(selectedSummary.totalIncome, selectedMonth.currency) }}</span>
-            <span>Spending {{ formatMoney(selectedSummary.totalExpenses, selectedMonth.currency) }}</span>
-            <span>Cash Flow {{ formatMoney(selectedSummary.monthlyCashFlow, selectedMonth.currency) }}</span>
-          </div>
-        </div>
-      </template>
-
-      <template v-if="selectedMonth">
-        <div class="month-fields">
-          <label>
-            <span>Month</span>
-            <el-select v-model="selectedMonth.label" filterable>
-              <el-option v-for="option in monthOptions" :key="option" :label="option" :value="option" />
-            </el-select>
-          </label>
-          <label>
-            <span>Passive income (auto)</span>
-            <strong>{{ formatMoney(selectedSummary.passiveIncome, selectedMonth.currency) }}</strong>
-          </label>
-        </div>
-
-        <section v-for="section in reportSections" :key="section" class="monthly-editor-section">
-          <div class="section-head">
-            <h2>{{ section }}</h2>
-            <el-button :icon="Plus" @click="addItem(section as MoneySection)">Add Row</el-button>
-          </div>
-          <el-table :data="sectionItems(selectedMonth, section as MoneySection)" size="large" class="data-table" table-layout="fixed" max-height="320">
-            <el-table-column label="Project" min-width="220">
-              <template #default="{ row }">
-                <el-input v-model="row.name" @blur="ensureIncomeCategory(section as MoneySection, row)" />
-              </template>
-            </el-table-column>
-            <el-table-column v-if="isIncomeSection(section as MoneySection)" label="Type" min-width="130">
-              <template #default="{ row }">
-                <el-select v-model="row.category">
-                  <el-option v-for="category in incomeCategoryOptions" :key="category" :label="category" :value="category" />
-                </el-select>
-              </template>
-            </el-table-column>
-            <el-table-column label="Currency" min-width="120">
-              <template #default="{ row }">
-                <el-select v-model="row.currency">
-                  <el-option v-for="currency in currencyOptions" :key="currency" :label="currency" :value="currency" />
-                </el-select>
-              </template>
-            </el-table-column>
-            <el-table-column label="Amount" min-width="160" align="right">
-              <template #default="{ row }"><el-input-number v-model="row.amount" :precision="2" :controls="false" /></template>
-            </el-table-column>
-            <el-table-column label="Notes" min-width="240">
-              <template #default="{ row }"><el-input v-model="row.notes" /></template>
-            </el-table-column>
-            <el-table-column width="72" align="center">
-              <template #default="{ row }">
-                <el-button :icon="Delete" circle aria-label="Delete row" @click="removeItem(section as MoneySection, row.id)" />
-              </template>
-            </el-table-column>
-          </el-table>
-        </section>
-      </template>
-
-      <template #footer>
-        <el-button :disabled="months.length <= 1" @click="deleteMonth">Delete Month</el-button>
-        <el-button type="primary" @click="closeEditor">Done</el-button>
-      </template>
-    </el-dialog>
   </section>
 </template>
