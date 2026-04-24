@@ -433,15 +433,15 @@ function formatAllocation(value: number) {
             </div>
             <strong>{{ formatMoney(barbellBreakdown.defensive.total, displayCurrency) }}</strong>
           </div>
-          <div class="asset-list">
-            <div v-for="item in barbellBreakdown.defensive.items" :key="item.id" class="asset-row">
+          <div class="asset-list barbell-list">
+            <div v-for="item in barbellBreakdown.defensive.items" :key="item.id" class="asset-row barbell-item-row">
               <span>{{ item.label }}</span>
               <div class="barbell-row-values">
                 <strong>{{ formatMoney(item.value, displayCurrency) }}</strong>
                 <small>{{ formatAllocation(item.share) }}</small>
               </div>
             </div>
-            <div v-if="!barbellBreakdown.defensive.items.length" class="asset-row empty">No defensive holdings yet.</div>
+            <div v-if="!barbellBreakdown.defensive.items.length" class="asset-row barbell-item-row empty">No defensive holdings yet.</div>
           </div>
         </div>
         <div class="asset-group barbell-aggressive">
@@ -452,15 +452,15 @@ function formatAllocation(value: number) {
             </div>
             <strong>{{ formatMoney(barbellBreakdown.aggressive.total, displayCurrency) }}</strong>
           </div>
-          <div class="asset-list">
-            <div v-for="item in barbellBreakdown.aggressive.items" :key="item.id" class="asset-row">
+          <div class="asset-list barbell-list">
+            <div v-for="item in barbellBreakdown.aggressive.items" :key="item.id" class="asset-row barbell-item-row">
               <span>{{ item.label }}</span>
               <div class="barbell-row-values">
                 <strong>{{ formatMoney(item.value, displayCurrency) }}</strong>
                 <small>{{ formatAllocation(item.share) }}</small>
               </div>
             </div>
-            <div v-if="!barbellBreakdown.aggressive.items.length" class="asset-row empty">No growth/options holdings yet.</div>
+            <div v-if="!barbellBreakdown.aggressive.items.length" class="asset-row barbell-item-row empty">No growth/options holdings yet.</div>
           </div>
         </div>
       </div>

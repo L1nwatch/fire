@@ -310,9 +310,41 @@ body {
   gap: 2px;
 }
 
+.barbell-list {
+  gap: 4px;
+}
+
+.barbell-item-row {
+  min-height: 0;
+  padding: 5px 8px;
+  border-radius: 6px;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.15;
+}
+
+.barbell-item-row > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barbell-item-row .barbell-row-values {
+  gap: 0;
+}
+
+.barbell-item-row .barbell-row-values strong {
+  font-size: 12px;
+  line-height: 1.1;
+}
+
 .barbell-row-values small {
   color: var(--muted);
   font-size: 11px;
+}
+
+.barbell-item-row .barbell-row-values small {
+  font-size: 10px;
 }
 
 .risk-list,
