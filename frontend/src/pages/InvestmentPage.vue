@@ -19,6 +19,7 @@ import {
 
 const CURRENT_PORTFOLIO_DATE = 'CURRENT'
 const AUTO_REFRESH_MS = 2 * 60 * 1000
+const BARBELL_ITEM_MIN_SHARE = 0.001
 
 const portfolio = ref<InvestmentSnapshot>(createCurrentPortfolio())
 const loaded = ref(false)
@@ -64,18 +65,23 @@ const barbellBreakdown = computed(() => {
   const aggressiveEntries = entries.filter((entry) => !entry.defensive).sort((a, b) => b.value - a.value)
   const defensiveTotal = defensiveEntries.reduce((sum, entry) => sum + entry.value, 0)
   const aggressiveTotal = aggressiveEntries.reduce((sum, entry) => sum + entry.value, 0)
+  const withShare = (entry: (typeof entries)[number]) => ({ ...entry, share: total ? entry.value / total : 0 })
+  const visibleItems = (items: typeof entries) =>
+    items
+      .map(withShare)
+      .filter((entry) => Math.abs(entry.share) >= BARBELL_ITEM_MIN_SHARE)
 
   return {
     total,
     defensive: {
       total: defensiveTotal,
       share: total ? defensiveTotal / total : 0,
-      items: defensiveEntries.map((entry) => ({ ...entry, share: total ? entry.value / total : 0 })),
+      items: visibleItems(defensiveEntries),
     },
     aggressive: {
       total: aggressiveTotal,
       share: total ? aggressiveTotal / total : 0,
-      items: aggressiveEntries.map((entry) => ({ ...entry, share: total ? entry.value / total : 0 })),
+      items: visibleItems(aggressiveEntries),
     },
   }
 })
