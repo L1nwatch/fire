@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { fetchFinanceState, fetchInvestmentState, fetchPortfolioState } from '../lib/api'
 import { convertMoney, displayCurrency, formatMoney, normalizeCurrency } from '../lib/currency'
-import { emptyMonth, sampleFinanceState, summarizeLedger, summarizeMonth, type FinancialMonth } from '../lib/finance'
+import { emptyMonth, sampleFinanceState, summarizeReportMonth, type FinancialMonth } from '../lib/finance'
 import {
   emptyInvestmentState,
   investmentItemAmount,
@@ -114,22 +114,10 @@ function percent(value: number) {
 }
 
 function summarizeFinanceMonth(month: FinancialMonth) {
-  const baseSummary = summarizeMonth(month)
-  const ledgerSummary = summarizeLedger(
+  return summarizeReportMonth(
+    month,
     finance.value.ledger.filter((entry) => ledgerMonth(entry.date) === month.label),
-    month.currency,
   )
-  const totalIncome = roundMoney(ledgerSummary.income)
-  const totalExpenses = roundMoney(ledgerSummary.expense)
-  const monthlyCashFlow = roundMoney(totalIncome + totalExpenses)
-  const savingsRate = totalIncome ? roundPercent((monthlyCashFlow / totalIncome) * 100) : 0
-  return {
-    ...baseSummary,
-    totalIncome,
-    totalExpenses,
-    monthlyCashFlow,
-    savingsRate,
-  }
 }
 
 function ledgerMonth(date: string) {
@@ -140,10 +128,6 @@ function ledgerMonth(date: string) {
 
 function roundPercent(value: number) {
   return Math.round((Number.isFinite(value) ? value : 0) * 10) / 10
-}
-
-function roundMoney(value: number) {
-  return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
 }
 
 function assetCurrency(asset: InvestmentItem) {

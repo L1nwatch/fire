@@ -296,6 +296,29 @@ export function summarizeMonth(month: FinancialMonth): FinanceSummary {
   }
 }
 
+export function hasMonthlyReportItems(month: FinancialMonth) {
+  return [month.income, month.expenses, month.assets, month.liabilities].some((items) => items.length > 0)
+}
+
+export function summarizeReportMonth(month: FinancialMonth, ledgerEntries: DailyLedgerEntry[]): FinanceSummary {
+  const baseSummary = summarizeMonth(month)
+  if (hasMonthlyReportItems(month)) {
+    return baseSummary
+  }
+
+  const ledgerSummary = summarizeLedger(ledgerEntries, month.currency)
+  const totalIncome = roundMoney(ledgerSummary.income)
+  const totalExpenses = roundMoney(ledgerSummary.expense)
+  const monthlyCashFlow = roundMoney(totalIncome + totalExpenses)
+  return {
+    ...baseSummary,
+    totalIncome,
+    totalExpenses,
+    monthlyCashFlow,
+    savingsRate: totalIncome ? roundPercent((monthlyCashFlow / totalIncome) * 100) : 0,
+  }
+}
+
 export function summarizeLedger(entries: DailyLedgerEntry[], targetCurrency = 'CNY') {
   const currency = normalizeCurrencyCode(targetCurrency, 'CNY')
   const sumBy = (category: string) =>

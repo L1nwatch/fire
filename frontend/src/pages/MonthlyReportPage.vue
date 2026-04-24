@@ -2,19 +2,17 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import type { ECharts, EChartsOption } from 'echarts'
-import { fetchFinanceState, saveFinanceStateToDb } from '../lib/api'
+import { fetchFinanceState } from '../lib/api'
 import { formatMoney } from '../lib/currency'
 import {
   emptyMonth,
   sampleFinanceState,
-  summarizeLedger,
   summarizeMonth,
-  type FinanceSummary,
+  summarizeReportMonth,
   type FinancialMonth,
 } from '../lib/finance'
 
 const finance = ref(sampleFinanceState)
-const loaded = ref(false)
 const saveError = ref('')
 const chartEl = ref<HTMLDivElement | null>(null)
 const activeChartPoint = ref<MonthTrendPoint | null>(null)
@@ -76,20 +74,6 @@ const chartStats = computed(() => {
   }
 })
 
-watch(
-  finance,
-  async (nextState) => {
-    if (!loaded.value) return
-    try {
-      await saveFinanceStateToDb(nextState)
-      saveError.value = ''
-    } catch (error) {
-      saveError.value = error instanceof Error ? error.message : 'Failed to save finance database'
-    }
-  },
-  { deep: true },
-)
-
 watch(months, (nextMonths) => {
   const maxPage = Math.max(1, Math.ceil(nextMonths.length / historyPageSize))
   if (historyPage.value > maxPage) {
@@ -118,31 +102,17 @@ onBeforeUnmount(() => {
 async function reloadFromDb() {
   try {
     finance.value = await fetchFinanceState()
-    loaded.value = true
     saveError.value = ''
   } catch (error) {
-    loaded.value = true
     saveError.value = error instanceof Error ? error.message : 'Failed to load finance database'
   }
 }
 
 function monthSummary(month: FinancialMonth) {
-  const baseSummary = summarizeMonth(month)
-  const ledgerSummary = summarizeLedger(
+  return summarizeReportMonth(
+    month,
     finance.value.ledger.filter((entry) => ledgerMonth(entry.date) === month.label),
-    month.currency,
   )
-  const totalIncome = roundMoney(ledgerSummary.income)
-  const totalExpenses = roundMoney(ledgerSummary.expense)
-  const monthlyCashFlow = roundMoney(totalIncome + totalExpenses)
-  const savingsRate = totalIncome ? roundPercent((monthlyCashFlow / totalIncome) * 100) : 0
-  return {
-    ...baseSummary,
-    totalIncome,
-    totalExpenses,
-    monthlyCashFlow,
-    savingsRate,
-  } satisfies FinanceSummary
 }
 
 function activeIncomeForMonth(month: FinancialMonth) {
@@ -302,14 +272,6 @@ function clampSavingsRate(value: number) {
 
 function activeIncomeValue(totalIncome: number, passiveIncome: number) {
   return Math.round((totalIncome - passiveIncome) * 100) / 100
-}
-
-function roundMoney(value: number) {
-  return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
-}
-
-function roundPercent(value: number) {
-  return Math.round((Number.isFinite(value) ? value : 0) * 10) / 10
 }
 </script>
 
