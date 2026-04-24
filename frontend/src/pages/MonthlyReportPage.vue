@@ -19,7 +19,7 @@ const activeChartPoint = ref<MonthTrendPoint | null>(null)
 const historyPage = ref(1)
 const historyPageSize = 10
 let chart: ECharts | null = null
-const savingsRateChartMin = -100
+const savingsRateChartMin = -10
 const savingsRateChartMax = 100
 
 interface MonthTrendPoint {
