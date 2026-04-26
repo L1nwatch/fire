@@ -648,7 +648,7 @@ body {
 }
 
 .monthly-summary-strip {
-  grid-template-columns: repeat(6, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
 }
 
 .asset-summary-item {
@@ -659,6 +659,7 @@ body {
   display: grid;
   gap: 6px;
   min-height: 76px;
+  min-width: 0;
 }
 
 .asset-summary-item:nth-child(1) {
@@ -694,10 +695,13 @@ body {
 .asset-summary-item strong {
   font-size: 18px;
   line-height: 1.2;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .asset-summary-item.primary strong {
-  font-size: 24px;
+  font-size: 20px;
   color: var(--accent-strong);
 }
 

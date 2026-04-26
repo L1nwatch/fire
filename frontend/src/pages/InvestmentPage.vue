@@ -34,7 +34,6 @@ let autoRefreshTimer: number | null = null
 const lastAutoRefreshAt = ref(0)
 
 const totalAvailable = computed(() => snapshotTotalByCategory(portfolio.value, displayCurrency.value, 'available'))
-const totalLocked = computed(() => snapshotTotalByCategory(portfolio.value, displayCurrency.value, 'locked'))
 const totalAll = computed(() => snapshotTotal(portfolio.value, displayCurrency.value))
 const totalCost = computed(() =>
   round2(
@@ -400,10 +399,6 @@ function formatAllocation(value: number) {
       <div class="asset-summary-item primary">
         <span>Available</span>
         <strong>{{ formatMoney(totalAvailable, displayCurrency) }}</strong>
-      </div>
-      <div class="asset-summary-item">
-        <span>Locked</span>
-        <strong>{{ formatMoney(totalLocked, displayCurrency) }}</strong>
       </div>
       <div class="asset-summary-item">
         <span>Market Value</span>
