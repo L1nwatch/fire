@@ -158,6 +158,21 @@ def init_db(conn: sqlite3.Connection) -> None:
             notes TEXT NOT NULL DEFAULT '',
             position INTEGER NOT NULL DEFAULT 0
         );
+
+        CREATE TABLE IF NOT EXISTS market_sentiment_series (
+            series_key TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            label TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT '',
+            fetched_at TEXT NOT NULL DEFAULT ''
+        );
+
+        CREATE TABLE IF NOT EXISTS market_sentiment_points (
+            series_key TEXT NOT NULL REFERENCES market_sentiment_series(series_key) ON DELETE CASCADE,
+            date TEXT NOT NULL,
+            value REAL NOT NULL,
+            PRIMARY KEY (series_key, date)
+        );
         """
     )
     investment_item_columns = {
@@ -719,6 +734,77 @@ def load_portfolio_state(conn: sqlite3.Connection) -> dict[str, Any]:
 
 def save_portfolio_state(conn: sqlite3.Connection, state: dict[str, Any]) -> None:
     _save_snapshot_state(conn, state, "portfolio_snapshots", "portfolio_items")
+
+
+def load_market_sentiment_cache(conn: sqlite3.Connection) -> dict[str, Any]:
+    return {
+        "vxn": _load_market_sentiment_series(conn, "vxn", "Cboe Nasdaq-100 Volatility Index", "VXN"),
+        "fearGreed": _load_market_sentiment_series(conn, "fear_greed", "CNN Fear & Greed Index", "Fear & Greed"),
+        "errors": [],
+        "cached": True,
+    }
+
+
+def save_market_sentiment_series(conn: sqlite3.Connection, series_key: str, series: dict[str, Any], fetched_at: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO market_sentiment_series (series_key, name, label, source, fetched_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(series_key) DO UPDATE SET
+            name = excluded.name,
+            label = excluded.label,
+            source = excluded.source,
+            fetched_at = excluded.fetched_at
+        """,
+        (
+            series_key,
+            series.get("name", ""),
+            series.get("label", ""),
+            series.get("source") or "",
+            fetched_at,
+        ),
+    )
+    for point in series.get("points", []):
+        conn.execute(
+            """
+            INSERT INTO market_sentiment_points (series_key, date, value)
+            VALUES (?, ?, ?)
+            ON CONFLICT(series_key, date) DO UPDATE SET value = excluded.value
+            """,
+            (
+                series_key,
+                point.get("date", ""),
+                float(point.get("value") or 0),
+            ),
+        )
+    conn.commit()
+
+
+def _load_market_sentiment_series(conn: sqlite3.Connection, series_key: str, fallback_name: str, fallback_label: str) -> dict[str, Any]:
+    row = conn.execute(
+        "SELECT * FROM market_sentiment_series WHERE series_key = ?",
+        (series_key,),
+    ).fetchone()
+    point_rows = conn.execute(
+        """
+        SELECT date, value
+        FROM market_sentiment_points
+        WHERE series_key = ?
+        ORDER BY date
+        """,
+        (series_key,),
+    ).fetchall()
+    points = [{"date": point["date"], "value": float(point["value"])} for point in point_rows]
+    latest = points[-1] if points else None
+    return {
+        "name": row["name"] if row else fallback_name,
+        "label": row["label"] if row else fallback_label,
+        "latest": latest["value"] if latest else None,
+        "latestDate": latest["date"] if latest else None,
+        "source": row["source"] if row and row["source"] else None,
+        "fetchedAt": row["fetched_at"] if row and row["fetched_at"] else None,
+        "points": points,
+    }
 
 
 def _load_snapshot_state(conn: sqlite3.Connection, snapshot_table: str, item_table: str) -> dict[str, Any]:

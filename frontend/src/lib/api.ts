@@ -74,3 +74,34 @@ export async function fetchLatestQuote(symbol: string): Promise<MarketQuote> {
   }
   return (await response.json()) as MarketQuote
 }
+
+export interface MarketSentimentPoint {
+  date: string
+  value: number
+}
+
+export interface MarketSentimentSeries {
+  name: string
+  label: string
+  latest: number | null
+  latestDate: string | null
+  fetchedAt?: string | null
+  source: string | null
+  points: MarketSentimentPoint[]
+}
+
+export interface MarketSentimentState {
+  vxn: MarketSentimentSeries
+  fearGreed: MarketSentimentSeries
+  errors: string[]
+  cached?: boolean
+}
+
+export async function fetchMarketSentiment(options: { refresh?: boolean } = {}): Promise<MarketSentimentState> {
+  const suffix = options.refresh ? '?refresh=true' : ''
+  const response = await fetch(`${apiBase}/api/market/sentiment${suffix}`)
+  if (!response.ok) {
+    throw new Error(`Failed to load market sentiment: ${response.status}`)
+  }
+  return (await response.json()) as MarketSentimentState
+}

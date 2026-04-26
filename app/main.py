@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date
+from datetime import date, datetime, timezone
 from csv import DictReader
 from io import StringIO
 from pathlib import Path
@@ -21,14 +21,17 @@ from app.db import (
     init_db,
     load_finance_state,
     load_investment_state,
+    load_market_sentiment_cache,
     load_portfolio_state,
     save_finance_state,
     save_investment_state,
+    save_market_sentiment_series,
     save_portfolio_state,
 )
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 FRONTEND_DIST = ROOT_DIR / "frontend" / "dist"
+MARKET_SENTIMENT_CACHE_SECONDS = 60 * 60
 
 app = FastAPI(title="Fire")
 
@@ -119,6 +122,183 @@ def get_market_quote(symbol: str) -> dict[str, Any]:
             errors.append(str(error.detail))
 
     raise HTTPException(status_code=502, detail=f"Quote fetch failed ({'; '.join(errors)})")
+
+
+@app.get("/api/market/sentiment")
+def get_market_sentiment(refresh: bool = False) -> dict[str, Any]:
+    with connect() as conn:
+        init_db(conn)
+        cached = load_market_sentiment_cache(conn)
+        if not refresh and _market_sentiment_cache_is_fresh(cached):
+            return cached
+
+    errors: list[str] = []
+    fetched_at = datetime.now(timezone.utc).isoformat()
+
+    try:
+        vxn = _fetch_yahoo_chart("^VXN", "Cboe Nasdaq-100 Volatility Index", "VXN")
+        with connect() as conn:
+            init_db(conn)
+            save_market_sentiment_series(conn, "vxn", vxn, fetched_at)
+    except HTTPException as error:
+        errors.append(f"VXN: {error.detail}")
+
+    try:
+        fear_greed = _fetch_cnn_fear_greed()
+        with connect() as conn:
+            init_db(conn)
+            save_market_sentiment_series(conn, "fear_greed", fear_greed, fetched_at)
+    except HTTPException as error:
+        errors.append(f"Fear & Greed: {error.detail}")
+
+    with connect() as conn:
+        init_db(conn)
+        cached = load_market_sentiment_cache(conn)
+
+    cached["errors"] = errors
+    cached["cached"] = False
+    return cached
+
+
+def _market_sentiment_cache_is_fresh(state: dict[str, Any]) -> bool:
+    series = [state.get("vxn", {}), state.get("fearGreed", {})]
+    if any(not item.get("points") for item in series):
+        return False
+
+    fetched_at_values = [item.get("fetchedAt") for item in series]
+    if any(not value for value in fetched_at_values):
+        return False
+
+    try:
+        oldest_fetch = min(datetime.fromisoformat(str(value)) for value in fetched_at_values)
+    except ValueError:
+        return False
+
+    age_seconds = (datetime.now(timezone.utc) - oldest_fetch).total_seconds()
+    return age_seconds < MARKET_SENTIMENT_CACHE_SECONDS
+
+
+def _fetch_yahoo_chart(symbol: str, name: str, label: str) -> dict[str, Any]:
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{quote_plus(symbol)}?range=3mo&interval=1d"
+    try:
+        request = Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 FireApp/1.0",
+                "Accept": "application/json",
+            },
+        )
+        with urlopen(request, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as error:
+        raise HTTPException(status_code=502, detail=f"Yahoo chart provider error: {error.code}") from error
+    except URLError as error:
+        raise HTTPException(status_code=502, detail=f"Yahoo chart provider unavailable: {error.reason}") from error
+    except Exception as error:  # pragma: no cover - defensive
+        raise HTTPException(status_code=502, detail="Failed to fetch Yahoo chart data") from error
+
+    results = payload.get("chart", {}).get("result", [])
+    if not results:
+        raise HTTPException(status_code=404, detail=f"No chart data found for {symbol}")
+
+    result = results[0]
+    timestamps = result.get("timestamp", [])
+    closes = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
+    points = []
+    for timestamp, close_value in zip(timestamps, closes):
+        if close_value is None:
+            continue
+        try:
+            value = float(close_value)
+        except (TypeError, ValueError):
+            continue
+        points.append(
+            {
+                "date": datetime.fromtimestamp(int(timestamp), tz=timezone.utc).date().isoformat(),
+                "value": round(value, 2),
+            }
+        )
+
+    if not points:
+        raise HTTPException(status_code=404, detail=f"No valid chart points found for {symbol}")
+
+    latest = points[-1]
+    return {
+        "name": name,
+        "label": label,
+        "latest": latest["value"],
+        "latestDate": latest["date"],
+        "source": "Yahoo Finance",
+        "points": points,
+    }
+
+
+def _fetch_cnn_fear_greed() -> dict[str, Any]:
+    url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+    try:
+        request = Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 FireApp/1.0",
+                "Accept": "application/json",
+                "Origin": "https://www.cnn.com",
+                "Referer": "https://www.cnn.com/",
+            },
+        )
+        with urlopen(request, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as error:
+        raise HTTPException(status_code=502, detail=f"CNN provider error: {error.code}") from error
+    except URLError as error:
+        raise HTTPException(status_code=502, detail=f"CNN provider unavailable: {error.reason}") from error
+    except Exception as error:  # pragma: no cover - defensive
+        raise HTTPException(status_code=502, detail="Failed to fetch CNN Fear & Greed data") from error
+
+    historical = payload.get("fear_and_greed_historical", {})
+    raw_points = historical.get("data", []) if isinstance(historical, dict) else []
+    points = []
+    for point in raw_points[-90:]:
+        if not isinstance(point, dict):
+            continue
+        timestamp = _parse_numeric(point.get("x"))
+        value = _parse_numeric(point.get("y"))
+        if timestamp is None or value is None:
+            continue
+        seconds = int(timestamp / 1000) if timestamp > 10_000_000_000 else int(timestamp)
+        points.append(
+            {
+                "date": datetime.fromtimestamp(seconds, tz=timezone.utc).date().isoformat(),
+                "value": round(value, 1),
+            }
+        )
+
+    current = payload.get("fear_and_greed", {})
+    latest_value = _parse_numeric(current.get("score") if isinstance(current, dict) else None)
+    latest_date = None
+    if isinstance(current, dict):
+        latest_timestamp = _parse_numeric(current.get("timestamp"))
+        if latest_timestamp is not None:
+            seconds = int(latest_timestamp / 1000) if latest_timestamp > 10_000_000_000 else int(latest_timestamp)
+            latest_date = datetime.fromtimestamp(seconds, tz=timezone.utc).date().isoformat()
+
+    if points:
+        latest_point = points[-1]
+        latest_value = latest_value if latest_value is not None else latest_point["value"]
+        latest_date = latest_date or latest_point["date"]
+    elif latest_value is not None:
+        latest_date = latest_date or date.today().isoformat()
+        points = [{"date": latest_date, "value": round(latest_value, 1)}]
+    else:
+        raise HTTPException(status_code=404, detail="No valid CNN Fear & Greed points found")
+
+    return {
+        "name": "CNN Fear & Greed Index",
+        "label": "Fear & Greed",
+        "latest": round(float(latest_value), 1),
+        "latestDate": latest_date,
+        "source": "CNN",
+        "points": points,
+    }
 
 
 def _fetch_yahoo_quote(symbol: str) -> dict[str, Any]:

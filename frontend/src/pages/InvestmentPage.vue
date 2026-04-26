@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import * as echarts from 'echarts'
+import type { ECharts, EChartsOption } from 'echarts'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Delete, Plus } from '@element-plus/icons-vue'
-import { fetchLatestQuote, fetchPortfolioState, savePortfolioStateToDb } from '../lib/api'
+import { Delete, Plus, Refresh } from '@element-plus/icons-vue'
+import { fetchLatestQuote, fetchMarketSentiment, fetchPortfolioState, savePortfolioStateToDb, type MarketSentimentSeries, type MarketSentimentState } from '../lib/api'
 import { convertMoney, currencyOptions, displayCurrency, formatMoney, normalizeCurrency } from '../lib/currency'
 import {
   createInvestmentItem,
@@ -26,11 +28,18 @@ const loaded = ref(false)
 const saveError = ref('')
 const quoteLoadingIds = ref<Record<string, boolean>>({})
 const autoRefreshing = ref(false)
+const sentimentLoading = ref(false)
+const sentimentError = ref('')
+const marketSentiment = ref<MarketSentimentState | null>(null)
+const vxnChartEl = ref<HTMLDivElement | null>(null)
+const fearGreedChartEl = ref<HTMLDivElement | null>(null)
 const showEditor = ref(false)
 const editorDraft = ref<InvestmentItem | null>(null)
 const editingItemId = ref('')
 const isCreatingItem = ref(false)
 let autoRefreshTimer: number | null = null
+let vxnChart: ECharts | null = null
+let fearGreedChart: ECharts | null = null
 const lastAutoRefreshAt = ref(0)
 
 const totalAvailable = computed(() => snapshotTotalByCategory(portfolio.value, displayCurrency.value, 'available'))
@@ -45,6 +54,30 @@ const totalCost = computed(() =>
 )
 const totalProfit = computed(() => round2(totalAll.value - totalCost.value))
 const totalProfitPercent = computed(() => (Math.abs(totalCost.value) > 1e-9 ? (totalProfit.value / totalCost.value) * 100 : 0))
+const vxnSeries = computed(() => marketSentiment.value?.vxn ?? null)
+const fearGreedSeries = computed(() => marketSentiment.value?.fearGreed ?? null)
+const vxnSignal = computed(() => {
+  const value = vxnSeries.value?.latest
+  if (!Number.isFinite(value)) {
+    return { className: 'neutral', label: 'Waiting', detail: 'No VXN reading' }
+  }
+  if (Number(value) <= 22) {
+    return { className: 'low', label: 'Low Vol', detail: 'VXN <= 22' }
+  }
+  if (Number(value) >= 30) {
+    return { className: 'high', label: 'High Vol', detail: 'VXN >= 30' }
+  }
+  return { className: 'neutral', label: 'Neutral', detail: '22 < VXN < 30' }
+})
+const fearGreedSignal = computed(() => {
+  const value = fearGreedSeries.value?.latest
+  if (!Number.isFinite(value)) return 'Waiting'
+  if (Number(value) <= 25) return 'Extreme Fear'
+  if (Number(value) < 45) return 'Fear'
+  if (Number(value) <= 55) return 'Neutral'
+  if (Number(value) < 75) return 'Greed'
+  return 'Extreme Greed'
+})
 const barbellBreakdown = computed(() => {
   const entries = portfolio.value.items
     .map((item) => {
@@ -100,6 +133,9 @@ watch(
 )
 
 onMounted(async () => {
+  initSentimentCharts()
+  window.addEventListener('resize', resizeSentimentCharts)
+  void loadMarketSentiment()
   try {
     const state = await fetchPortfolioState()
     portfolio.value = state.snapshots[0] ? normalizePortfolio(state.snapshots[0]) : createCurrentPortfolio()
@@ -115,7 +151,24 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   stopAutoRefresh()
+  window.removeEventListener('resize', resizeSentimentCharts)
+  vxnChart?.dispose()
+  fearGreedChart?.dispose()
 })
+
+async function loadMarketSentiment(options: { refresh?: boolean } = {}) {
+  sentimentLoading.value = true
+  try {
+    const state = await fetchMarketSentiment(options)
+    marketSentiment.value = state
+    sentimentError.value = state.errors.length ? state.errors.join(' | ') : ''
+  } catch (error) {
+    sentimentError.value = error instanceof Error ? error.message : 'Failed to load market sentiment'
+  } finally {
+    sentimentLoading.value = false
+    renderSentimentCharts()
+  }
+}
 
 function addItem() {
   const newItem = createInvestmentItem(undefined, portfolio.value.currency || 'CAD')
@@ -209,6 +262,106 @@ function handleVisibilityChange() {
   if (Date.now() - lastAutoRefreshAt.value >= AUTO_REFRESH_MS) {
     void refreshAllQuotes({ silent: true })
   }
+  void loadMarketSentiment()
+}
+
+function initSentimentCharts() {
+  if (vxnChartEl.value && !vxnChart) {
+    vxnChart = echarts.init(vxnChartEl.value)
+  }
+  if (fearGreedChartEl.value && !fearGreedChart) {
+    fearGreedChart = echarts.init(fearGreedChartEl.value)
+  }
+}
+
+function renderSentimentCharts() {
+  initSentimentCharts()
+  renderMarketChart(vxnChart, vxnSeries.value, '#6f5bb8', {
+    min: undefined,
+    max: undefined,
+    markLines: [
+      { yAxis: 22, name: 'Low' },
+      { yAxis: 30, name: 'High' },
+    ],
+  })
+  renderMarketChart(fearGreedChart, fearGreedSeries.value, '#d97432', { min: 0, max: 100 })
+}
+
+function renderMarketChart(
+  chart: ECharts | null,
+  series: MarketSentimentSeries | null,
+  color: string,
+  options: { min?: number; max?: number; markLines?: Array<{ yAxis: number; name: string }> } = {},
+) {
+  if (!chart || !series?.points.length) return
+  const points = series.points
+  const chartOption: EChartsOption = {
+    animationDuration: 450,
+    grid: { left: 36, right: 16, top: 16, bottom: 26 },
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params) => {
+        const item = Array.isArray(params) ? params[0] : params
+        const point = points[item?.dataIndex ?? 0]
+        if (!point) return ''
+        return `${point.date}<br/><strong>${point.value.toFixed(1)}</strong>`
+      },
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: points.map((point) => point.date),
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: '#d8dfec' } },
+      axisLabel: {
+        color: '#68716d',
+        hideOverlap: true,
+        formatter: (value: string) => value.slice(5),
+      },
+    },
+    yAxis: {
+      type: 'value',
+      scale: options.min === undefined && options.max === undefined,
+      min: options.min,
+      max: options.max,
+      splitNumber: 4,
+      axisLabel: { color: '#68716d' },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { color: '#e2e8e4' } },
+    },
+    series: [
+      {
+        type: 'line',
+        data: points.map((point) => point.value),
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 5,
+        showSymbol: false,
+        lineStyle: { width: 3, color },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: `${color}44` },
+            { offset: 1, color: `${color}08` },
+          ]),
+        },
+        markLine: options.markLines
+          ? {
+              symbol: 'none',
+              label: { color: '#68716d', formatter: '{b}' },
+              lineStyle: { type: 'dashed', color: '#8d98a8', width: 1 },
+              data: options.markLines,
+            }
+          : undefined,
+      },
+    ],
+  }
+  chart.setOption(chartOption, true)
+}
+
+function resizeSentimentCharts() {
+  vxnChart?.resize()
+  fearGreedChart?.resize()
 }
 
 function openEditor(item: InvestmentItem) {
@@ -394,6 +547,60 @@ function formatAllocation(value: number) {
     </div>
 
     <el-alert v-if="saveError" :title="saveError" type="warning" show-icon :closable="false" class="page-alert" />
+
+    <section class="market-sentiment-panel">
+      <div class="section-head">
+        <div>
+          <h2>Market Sentiment</h2>
+          <span class="section-subtitle">Nasdaq volatility and broad market fear/greed context.</span>
+        </div>
+        <el-button :icon="Refresh" :loading="sentimentLoading" plain @click="loadMarketSentiment({ refresh: true })">Refresh</el-button>
+      </div>
+      <el-alert v-if="sentimentError" :title="sentimentError" type="warning" show-icon :closable="false" class="sentiment-alert" />
+      <div class="sentiment-grid">
+        <article class="sentiment-card" :class="`vxn-${vxnSignal.className}`">
+          <div class="sentiment-card-head">
+            <div>
+              <span>Cboe Nasdaq-100 Volatility Index</span>
+              <strong>{{ vxnSeries?.latest === null || vxnSeries?.latest === undefined ? '-' : vxnSeries.latest.toFixed(2) }}</strong>
+            </div>
+            <div class="sentiment-badge" :class="vxnSignal.className">
+              <strong>{{ vxnSignal.label }}</strong>
+              <span>{{ vxnSignal.detail }}</span>
+            </div>
+          </div>
+          <div class="sentiment-chart-wrap">
+            <div ref="vxnChartEl" class="sentiment-chart" role="img" aria-label="VXN 3 month chart"></div>
+            <span v-if="!vxnSeries?.points.length" class="sentiment-empty">No chart data</span>
+          </div>
+          <div class="sentiment-foot">
+            <span>{{ vxnSeries?.latestDate ?? 'No data' }}</span>
+            <span>{{ vxnSeries?.source ?? 'Provider unavailable' }}</span>
+          </div>
+        </article>
+
+        <article class="sentiment-card">
+          <div class="sentiment-card-head">
+            <div>
+              <span>CNN Fear & Greed Index</span>
+              <strong>{{ fearGreedSeries?.latest === null || fearGreedSeries?.latest === undefined ? '-' : fearGreedSeries.latest.toFixed(1) }}</strong>
+            </div>
+            <div class="sentiment-badge neutral">
+              <strong>{{ fearGreedSignal }}</strong>
+              <span>0 fear / 100 greed</span>
+            </div>
+          </div>
+          <div class="sentiment-chart-wrap">
+            <div ref="fearGreedChartEl" class="sentiment-chart" role="img" aria-label="CNN Fear and Greed chart"></div>
+            <span v-if="!fearGreedSeries?.points.length" class="sentiment-empty">No chart data</span>
+          </div>
+          <div class="sentiment-foot">
+            <span>{{ fearGreedSeries?.latestDate ?? 'No data' }}</span>
+            <span>{{ fearGreedSeries?.source ?? 'Provider unavailable' }}</span>
+          </div>
+        </article>
+      </div>
+    </section>
 
     <div class="asset-summary-strip monthly-summary-strip">
       <div class="asset-summary-item primary">
