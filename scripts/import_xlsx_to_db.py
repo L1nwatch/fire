@@ -13,7 +13,7 @@ from zipfile import ZipFile
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
 
-from app.db import connect, init_db, insert_raw_row
+from app.db import connect, init_db, insert_raw_row, normalize_ledger_amount
 
 NS = {"a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 REL_NS = {"rel": "http://schemas.openxmlformats.org/package/2006/relationships"}
@@ -185,16 +185,16 @@ def import_daily_sheet(conn: sqlite3.Connection, workbook: str, sheet: str, rows
             (
                 stable_id("ledger", workbook, sheet, row_index),
                 date_value,
-                numeric(row_value(row, 1)),
-                numeric(row_value(row, 2)),
-                numeric(row_value(row, 3)),
-                numeric(row_value(row, 4)),
-                numeric(row_value(row, 5)),
-                numeric(row_value(row, 6)),
-                numeric(row_value(row, 7)),
-                numeric(row_value(row, 8)),
-                numeric(row_value(row, 9)),
-                numeric(row_value(row, 10)),
+                normalize_ledger_amount("income", numeric(row_value(row, 1))),
+                normalize_ledger_amount("expense", numeric(row_value(row, 2))),
+                normalize_ledger_amount("food", numeric(row_value(row, 3))),
+                normalize_ledger_amount("transport", numeric(row_value(row, 4))),
+                normalize_ledger_amount("shopping", numeric(row_value(row, 5))),
+                normalize_ledger_amount("insurance", numeric(row_value(row, 6))),
+                normalize_ledger_amount("telecom", numeric(row_value(row, 7))),
+                normalize_ledger_amount("utilities", numeric(row_value(row, 8))),
+                normalize_ledger_amount("event", numeric(row_value(row, 9))),
+                normalize_ledger_amount("rent", numeric(row_value(row, 10))),
                 text_at(row, 11),
                 workbook,
                 sheet,

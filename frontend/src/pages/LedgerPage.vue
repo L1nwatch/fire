@@ -4,7 +4,14 @@ import { useRoute } from 'vue-router'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import { fetchFinanceState, saveFinanceStateToDb } from '../lib/api'
 import { currencyOptions, formatMoney } from '../lib/currency'
-import { emptyLedgerEntry, ledgerCategoryOptions, sampleFinanceState, summarizeLedger } from '../lib/finance'
+import {
+  emptyLedgerEntry,
+  ledgerCategoryOptions,
+  normalizeLedgerAmount,
+  sampleFinanceState,
+  summarizeLedger,
+  type DailyLedgerEntry,
+} from '../lib/finance'
 
 interface DayCard {
   date: string
@@ -93,7 +100,9 @@ watch(
 
 onMounted(async () => {
   try {
-    finance.value = await fetchFinanceState()
+    const nextState = await fetchFinanceState()
+    nextState.ledger = nextState.ledger.map(normalizeLedgerEntry)
+    finance.value = nextState
     saveError.value = ''
   } catch (error) {
     saveError.value = error instanceof Error ? error.message : 'Failed to load finance database'
@@ -123,6 +132,7 @@ function addEntry(targetDate = selectedDate.value) {
   selectedDate.value = date
   const entry = emptyLedgerEntry(ledgerCurrency.value)
   entry.date = date
+  normalizeLedgerEntry(entry)
   finance.value.ledger.unshift(entry)
 }
 
@@ -133,6 +143,19 @@ function openDateEditor(date: string) {
 
 function removeEntry(id: string) {
   finance.value.ledger = finance.value.ledger.filter((entry) => entry.id !== id)
+}
+
+function normalizeLedgerEntry(entry: DailyLedgerEntry) {
+  entry.amount = normalizeLedgerAmount(entry.category, entry.amount)
+  return entry
+}
+
+function ledgerAmountMin(entry: DailyLedgerEntry) {
+  return entry.category.toLowerCase() === 'income' ? 0 : undefined
+}
+
+function ledgerAmountMax(entry: DailyLedgerEntry) {
+  return entry.category.toLowerCase() === 'income' ? undefined : 0
 }
 
 function ledgerMonth(date: string) {
@@ -273,13 +296,28 @@ function buildMonthDays(monthLabel: string): DayCard[] {
           </el-table-column>
           <el-table-column label="Category" min-width="170">
             <template #default="{ row }">
-              <el-select v-model="row.category">
-                <el-option v-for="category in ledgerCategoryOptions" :key="category" :label="category" :value="category" />
+              <el-select v-model="row.category" @change="normalizeLedgerEntry(row)">
+                <el-option
+                  v-for="category in ledgerCategoryOptions"
+                  :key="category"
+                  :label="category"
+                  :value="category"
+                />
               </el-select>
             </template>
           </el-table-column>
           <el-table-column label="Amount" min-width="140" align="right">
-            <template #default="{ row }"><el-input-number v-model="row.amount" :precision="2" :controls="false" /></template>
+            <template #default="{ row }">
+              <el-input-number
+                v-model="row.amount"
+                :precision="2"
+                :controls="false"
+                :min="ledgerAmountMin(row)"
+                :max="ledgerAmountMax(row)"
+                @change="normalizeLedgerEntry(row)"
+                @blur="normalizeLedgerEntry(row)"
+              />
+            </template>
           </el-table-column>
           <el-table-column label="Currency" min-width="120">
             <template #default="{ row }">

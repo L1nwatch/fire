@@ -325,14 +325,22 @@ export function summarizeLedger(entries: DailyLedgerEntry[], targetCurrency = 'C
     roundMoney(
       entries
         .filter((entry) => normalizeLedgerCategory(entry.category) === category)
-        .reduce((sum, entry) => sum + convertCurrency(entry.amount, entry.currency || currency, currency), 0),
+        .reduce(
+          (sum, entry) =>
+            sum + convertCurrency(normalizeLedgerAmount(entry.category, entry.amount), entry.currency || currency, currency),
+          0,
+        ),
     )
 
   const income = sumBy('income')
   const expense = roundMoney(
     entries
       .filter((entry) => normalizeLedgerCategory(entry.category) !== 'income')
-      .reduce((sum, entry) => sum + convertCurrency(entry.amount, entry.currency || currency, currency), 0),
+      .reduce(
+        (sum, entry) =>
+          sum + convertCurrency(normalizeLedgerAmount(entry.category, entry.amount), entry.currency || currency, currency),
+        0,
+      ),
   )
 
   return {
@@ -379,6 +387,12 @@ export function normalizeLedgerCategory(category?: string) {
   if (value === 'event') return 'event'
   if (value === 'rent') return 'rent'
   return 'expense-other'
+}
+
+export function normalizeLedgerAmount(category?: string, amount?: number) {
+  const value = Number(amount)
+  const normalizedAmount = Number.isFinite(value) ? Math.abs(value) : 0
+  return normalizeLedgerCategory(category) === 'income' ? normalizedAmount : -normalizedAmount
 }
 
 function sumItems(items: MoneyItem[], targetCurrency: CurrencyCode) {

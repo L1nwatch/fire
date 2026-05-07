@@ -322,6 +322,27 @@ def init_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE daily_ledger ADD COLUMN amount REAL NOT NULL DEFAULT 0")
     if "currency" not in daily_ledger_columns:
         conn.execute("ALTER TABLE daily_ledger ADD COLUMN currency TEXT NOT NULL DEFAULT 'CNY'")
+    conn.executescript(
+        """
+        UPDATE daily_ledger
+        SET
+            amount = CASE
+                WHEN lower(trim(category)) = 'income' THEN abs(amount)
+                WHEN trim(category) <> '' THEN -abs(amount)
+                ELSE amount
+            END,
+            income = abs(income),
+            expense = -abs(expense),
+            food = -abs(food),
+            transport = -abs(transport),
+            shopping = -abs(shopping),
+            insurance = -abs(insurance),
+            telecom = -abs(telecom),
+            utilities = -abs(utilities),
+            event = -abs(event),
+            rent = -abs(rent)
+        """
+    )
     conn.commit()
 
 
@@ -419,6 +440,7 @@ def load_finance_state(conn: sqlite3.Connection) -> dict[str, Any]:
             amount = float(row["amount"] or 0)
             if amount == 0:
                 amount = ledger_event_amount_for_category(row, category)
+            amount = normalize_ledger_amount(category, amount)
             ledger.append(
                 {
                     "id": row["id"],
@@ -518,7 +540,7 @@ def save_finance_state(conn: sqlite3.Connection, state: dict[str, Any]) -> None:
         if isinstance(currency_value, dict):
             currency_value = currency_value.get("label") or currency_value.get("value") or ""
         currency = normalize_currency(str(currency_value), "CNY")
-        amount = float(row.get("amount") or 0)
+        amount = normalize_ledger_amount(category, float(row.get("amount") or 0))
         income = amount if category == "income" else 0.0
         expense = amount if category != "income" else 0.0
         conn.execute(
@@ -598,6 +620,11 @@ def normalize_ledger_category(category: str | None) -> str:
     return ""
 
 
+def normalize_ledger_amount(category: str | None, amount: float) -> float:
+    value = abs(float(amount or 0))
+    return value if normalize_ledger_category(category) == "income" else -value
+
+
 def ledger_month_label(date_text: str | None) -> str:
     value = (date_text or "").strip()
     if len(value) < 7:
@@ -666,28 +693,28 @@ def parse_legacy_generated_ledger_id(entry_id: str | None) -> tuple[str, str] | 
 
 def ledger_event_amount_for_category(row: sqlite3.Row, category: str) -> float:
     if category == "income":
-        return float(row["income"] or 0)
+        return normalize_ledger_amount(category, float(row["income"] or 0))
     if category == "expense":
-        return float(row["expense"] or 0)
+        return normalize_ledger_amount(category, float(row["expense"] or 0))
     if category in LEDGER_EXPENSE_CATEGORIES:
-        return float(row[category] or 0)
+        return normalize_ledger_amount(category, float(row[category] or 0))
     return 0.0
 
 
 def expand_legacy_ledger_events(row: sqlite3.Row) -> list[dict[str, Any]]:
     events: list[tuple[str, float]] = []
-    income_amount = float(row["income"] or 0)
+    income_amount = normalize_ledger_amount("income", float(row["income"] or 0))
     if abs(income_amount) > 1e-9:
         events.append(("income", income_amount))
 
     detailed_expense_sum = 0.0
     for category in LEDGER_EXPENSE_CATEGORIES:
-        amount = float(row[category] or 0)
+        amount = normalize_ledger_amount(category, float(row[category] or 0))
         if abs(amount) > 1e-9:
             events.append((category, amount))
             detailed_expense_sum += amount
 
-    expense_amount = float(row["expense"] or 0)
+    expense_amount = normalize_ledger_amount("expense", float(row["expense"] or 0))
     if abs(detailed_expense_sum) <= 1e-9 and abs(expense_amount) > 1e-9:
         events.append(("expense", expense_amount))
 
