@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import type { ECharts, EChartsOption } from 'echarts'
 import { fetchFinanceState } from '../lib/api'
-import { formatMoney } from '../lib/currency'
+import { convertMoney, displayCurrency, formatMoney, normalizeCurrency } from '../lib/currency'
 import {
   emptyMonth,
   sampleFinanceState,
@@ -48,13 +48,15 @@ const chartPoints = computed<MonthTrendPoint[]>(() =>
     .map((month) => {
       const summary = monthSummary(month)
       const chartSavingsRate = clampSavingsRate(summary.savingsRate)
+      const monthCurrency = normalizeCurrency(month.currency)
+      const chartCurrency = displayCurrency.value
       return {
         id: month.id,
         label: month.label,
-        currency: month.currency,
-        income: summary.totalIncome,
-        spending: Math.abs(summary.totalExpenses),
-        cashFlow: summary.monthlyCashFlow,
+        currency: chartCurrency,
+        income: convertMoney(summary.totalIncome, monthCurrency, chartCurrency),
+        spending: Math.abs(convertMoney(summary.totalExpenses, monthCurrency, chartCurrency)),
+        cashFlow: convertMoney(summary.monthlyCashFlow, monthCurrency, chartCurrency),
         savingsRate: summary.savingsRate,
         chartSavingsRate,
         savingsRateCapped: summary.savingsRate !== chartSavingsRate,
@@ -145,7 +147,7 @@ function renderChart() {
   const points = chartPoints.value
   const maxMoneyValue = Math.max(0, ...points.map((point) => Math.max(point.income, point.spending)))
   const moneyAxisMax = maxMoneyValue > 0 ? maxMoneyValue * 1.2 : 1
-  const moneyAxisCurrency = latestMonth.value?.currency ?? 'CNY'
+  const moneyAxisCurrency = displayCurrency.value
   const option: EChartsOption = {
     animationDuration: 450,
     color: ['#1f7a63', '#d97432', '#2f6f9f'],
