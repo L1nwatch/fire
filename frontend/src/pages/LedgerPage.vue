@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import { fetchFinanceState, saveFinanceStateToDb } from '../lib/api'
@@ -11,6 +11,7 @@ import {
   sampleFinanceState,
   summarizeLedger,
   type DailyLedgerEntry,
+  type FinanceState,
 } from '../lib/finance'
 
 interface DayCard {
@@ -22,12 +23,25 @@ interface DayCard {
   expense: number
 }
 
+interface PendingFinanceSave {
+  state: FinanceState
+  token: string
+  updatedAt: string
+}
+
+type SaveStatus = 'idle' | 'saving' | 'pending' | 'failed'
+
+const pendingFinanceSaveKey = 'fire.dailyLedger.pendingFinanceSave.v1'
+
 const finance = ref(sampleFinanceState)
 const selectedMonth = ref('')
 const selectedDate = ref('')
 const editorVisible = ref(false)
 const loaded = ref(false)
 const saveError = ref('')
+const saveStatus = ref<SaveStatus>('idle')
+const isSaving = ref(false)
+const retryIntervalId = ref<number>()
 const route = useRoute()
 
 const monthOptions = computed(() => {
@@ -62,14 +76,9 @@ const monthDays = computed<DayCard[]>(() => buildMonthDays(selectedMonth.value))
 
 watch(
   finance,
-  async (nextState) => {
+  (nextState) => {
     if (!loaded.value) return
-    try {
-      await saveFinanceStateToDb(nextState)
-      saveError.value = ''
-    } catch (error) {
-      saveError.value = error instanceof Error ? error.message : 'Failed to save finance database'
-    }
+    queueFinanceSave(nextState)
   },
   { deep: true },
 )
@@ -99,13 +108,24 @@ watch(
 )
 
 onMounted(async () => {
+  window.addEventListener('online', retryPendingSave)
+  window.addEventListener('focus', retryPendingSave)
+  retryIntervalId.value = window.setInterval(retryPendingSave, 15000)
+
+  const pendingSave = loadPendingFinanceSave()
   try {
     const nextState = await fetchFinanceState()
     nextState.ledger = nextState.ledger.map(normalizeLedgerEntry)
-    finance.value = nextState
+    finance.value = pendingSave ? normalizeFinanceState(pendingSave.state) : nextState
     saveError.value = ''
   } catch (error) {
-    saveError.value = error instanceof Error ? error.message : 'Failed to load finance database'
+    if (pendingSave) {
+      finance.value = normalizeFinanceState(pendingSave.state)
+      saveError.value = 'Network is unavailable. Showing cached Daily Ledger edits and will retry upload when the connection returns.'
+      saveStatus.value = 'pending'
+    } else {
+      saveError.value = error instanceof Error ? error.message : 'Failed to load finance database'
+    }
   } finally {
     const routeSelectedMonth = queryMonthLabel()
     if (routeSelectedMonth && monthOptions.value.includes(routeSelectedMonth)) {
@@ -114,7 +134,18 @@ onMounted(async () => {
       selectedMonth.value = monthOptions.value[0] ?? currentMonthLabel()
     }
     loaded.value = true
+    if (pendingSave) {
+      saveStatus.value = 'pending'
+      saveError.value = saveError.value || 'Daily Ledger has cached edits waiting to upload.'
+      void flushPendingSave()
+    }
   }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('online', retryPendingSave)
+  window.removeEventListener('focus', retryPendingSave)
+  if (retryIntervalId.value) window.clearInterval(retryIntervalId.value)
 })
 
 watch(
@@ -145,9 +176,117 @@ function removeEntry(id: string) {
   finance.value.ledger = finance.value.ledger.filter((entry) => entry.id !== id)
 }
 
+function queueFinanceSave(state: FinanceState) {
+  const token = createSaveToken()
+  const pendingSave = {
+    state: normalizeFinanceState(cloneFinanceState(state)),
+    token,
+    updatedAt: new Date().toISOString(),
+  }
+  if (!cachePendingFinanceSave(pendingSave)) {
+    saveStatus.value = 'failed'
+    saveError.value = 'Could not save Daily Ledger edits in this browser. Check browser storage settings before continuing.'
+    return
+  }
+  saveStatus.value = navigator.onLine ? 'saving' : 'pending'
+  saveError.value = navigator.onLine
+    ? ''
+    : 'Network is offline. Daily Ledger edits are saved in this browser and will upload when the connection returns.'
+  void flushPendingSave()
+}
+
+async function flushPendingSave() {
+  if (isSaving.value) return
+  const pendingSave = loadPendingFinanceSave()
+  if (!pendingSave) {
+    saveStatus.value = 'idle'
+    saveError.value = ''
+    return
+  }
+
+  if (!navigator.onLine) {
+    saveStatus.value = 'pending'
+    saveError.value = 'Network is offline. Daily Ledger edits are saved in this browser and will upload when the connection returns.'
+    return
+  }
+
+  isSaving.value = true
+  saveStatus.value = 'saving'
+  try {
+    await saveFinanceStateToDb(pendingSave.state)
+    const latestPendingSave = loadPendingFinanceSave()
+    if (!latestPendingSave || latestPendingSave.token === pendingSave.token) {
+      clearPendingFinanceSave()
+      saveStatus.value = 'idle'
+      saveError.value = ''
+    } else {
+      saveStatus.value = 'pending'
+    }
+  } catch (error) {
+    saveStatus.value = 'failed'
+    const message = error instanceof Error ? error.message : 'Failed to save finance database'
+    saveError.value = `Upload failed. Daily Ledger edits are saved in this browser and will retry when the network is back. (${message})`
+  } finally {
+    isSaving.value = false
+  }
+
+  const latestPendingSave = loadPendingFinanceSave()
+  if (latestPendingSave && latestPendingSave.token !== pendingSave.token) {
+    void flushPendingSave()
+  }
+}
+
+function retryPendingSave() {
+  if (!loaded.value) return
+  void flushPendingSave()
+}
+
 function normalizeLedgerEntry(entry: DailyLedgerEntry) {
   entry.amount = normalizeLedgerAmount(entry.category, entry.amount)
   return entry
+}
+
+function normalizeFinanceState(state: FinanceState) {
+  return {
+    ...state,
+    months: state.months ?? [],
+    ledger: (state.ledger ?? []).map(normalizeLedgerEntry),
+    forecast: state.forecast ?? [],
+  }
+}
+
+function cloneFinanceState(state: FinanceState): FinanceState {
+  return JSON.parse(JSON.stringify(state)) as FinanceState
+}
+
+function createSaveToken() {
+  const randomId = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).slice(2)
+  return `${Date.now()}-${randomId}`
+}
+
+function loadPendingFinanceSave(): PendingFinanceSave | null {
+  const raw = localStorage.getItem(pendingFinanceSaveKey)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as PendingFinanceSave
+    if (!parsed?.state || !parsed.token) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function cachePendingFinanceSave(save: PendingFinanceSave) {
+  try {
+    localStorage.setItem(pendingFinanceSaveKey, JSON.stringify(save))
+    return true
+  } catch {
+    return false
+  }
+}
+
+function clearPendingFinanceSave() {
+  localStorage.removeItem(pendingFinanceSaveKey)
 }
 
 function ledgerAmountMin(entry: DailyLedgerEntry) {
@@ -230,6 +369,22 @@ function buildMonthDays(monthLabel: string): DayCard[] {
     </div>
 
     <el-alert v-if="saveError" :title="saveError" type="warning" show-icon :closable="false" class="page-alert" />
+    <el-alert
+      v-else-if="saveStatus === 'saving'"
+      title="Uploading Daily Ledger changes..."
+      type="info"
+      show-icon
+      :closable="false"
+      class="page-alert"
+    />
+    <el-alert
+      v-else-if="saveStatus === 'pending'"
+      title="Daily Ledger edits are saved in this browser and waiting to upload."
+      type="warning"
+      show-icon
+      :closable="false"
+      class="page-alert"
+    />
 
     <div class="sheet-summary">
       <span>Month {{ selectedMonth || '-' }}</span>
