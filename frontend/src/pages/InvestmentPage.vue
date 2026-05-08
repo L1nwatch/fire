@@ -542,7 +542,6 @@ function formatAllocation(value: number) {
       </div>
       <div class="actions">
         <span class="auto-refresh-hint">{{ autoRefreshing ? 'Refreshing quotes...' : 'Auto-refresh quotes every 2 min' }}</span>
-        <el-button type="primary" :icon="Plus" @click="addItem">Add Holding</el-button>
       </div>
     </div>
 
@@ -676,8 +675,11 @@ function formatAllocation(value: number) {
 
     <section class="panel" style="margin-top: 14px">
       <div class="section-head" style="margin-bottom: 10px">
-        <h2>Holdings</h2>
-        <span class="section-subtitle">Click any row to edit. Changes are saved when you close the editor.</span>
+        <div>
+          <h2>Holdings</h2>
+          <span class="section-subtitle">Click any row to edit. Changes are saved when you close the editor.</span>
+        </div>
+        <el-button type="primary" :icon="Plus" @click="addItem">Add Holding</el-button>
       </div>
 
       <el-table
