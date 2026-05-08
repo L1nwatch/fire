@@ -421,15 +421,6 @@ function buildMonthDays(monthLabel: string): DayCard[] {
       </div>
     </section>
 
-    <div class="sheet-summary">
-      <span>Date {{ selectedDate || '-' }}</span>
-      <span>Income <b class="positive">{{ formatMoney(daySummary.income, ledgerCurrency) }}</b></span>
-      <span>Expense {{ formatMoney(daySummary.expense, ledgerCurrency) }}</span>
-      <span>Food {{ formatMoney(daySummary.food, ledgerCurrency) }}</span>
-      <span>Transport {{ formatMoney(daySummary.transport, ledgerCurrency) }}</span>
-      <span>Rent {{ formatMoney(daySummary.rent, ledgerCurrency) }}</span>
-    </div>
-
     <el-dialog v-model="editorVisible" class="ledger-editor-dialog" :title="`Events · ${selectedDate || '-'}`" width="min(1160px, 92vw)">
       <div class="sheet-summary">
         <span>Date {{ selectedDate || '-' }}</span>
