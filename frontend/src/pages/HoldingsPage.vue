@@ -380,10 +380,6 @@ function percent(value: number) {
             <span>{{ totalLabel }}</span>
             <strong>{{ formatMoney(latestTotal, displayCurrency) }}</strong>
           </div>
-          <div class="asset-summary-item">
-            <span>Display currency</span>
-            <strong>{{ displayCurrency }}</strong>
-          </div>
         </div>
       </section>
     </div>
