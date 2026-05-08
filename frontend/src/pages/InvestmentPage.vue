@@ -46,13 +46,20 @@ const totalAvailable = computed(() => snapshotTotalByCategory(portfolio.value, d
 const totalAll = computed(() => snapshotTotal(portfolio.value, displayCurrency.value))
 const totalCost = computed(() =>
   round2(
-    portfolio.value.items.reduce((sum, item) => {
+    portfolio.value.items.filter(hasProfitTrend).reduce((sum, item) => {
       const itemCurrency = normalizeCurrency(item.currency || portfolio.value.currency || displayCurrency.value)
       return sum + convertMoney(investmentItemCost(item), itemCurrency, displayCurrency.value)
     }, 0),
   ),
 )
-const totalProfit = computed(() => round2(totalAll.value - totalCost.value))
+const totalProfit = computed(() =>
+  round2(
+    portfolio.value.items.filter(hasProfitTrend).reduce((sum, item) => {
+      const itemCurrency = normalizeCurrency(item.currency || portfolio.value.currency || displayCurrency.value)
+      return sum + convertMoney(rowProfit(item), itemCurrency, displayCurrency.value)
+    }, 0),
+  ),
+)
 const totalProfitPercent = computed(() => (Math.abs(totalCost.value) > 1e-9 ? (totalProfit.value / totalCost.value) * 100 : 0))
 const vxnSeries = computed(() => marketSentiment.value?.vxn ?? null)
 const fearGreedSeries = computed(() => marketSentiment.value?.fearGreed ?? null)
@@ -477,6 +484,7 @@ function round2(value: number) {
 }
 
 function rowProfit(item: InvestmentItem) {
+  if (!hasProfitTrend(item)) return 0
   return round2(investmentItemProfit(item))
 }
 
@@ -492,7 +500,12 @@ function rowProfitPercent(item: InvestmentItem) {
 }
 
 function rowProfitClass(item: InvestmentItem) {
+  if (!hasProfitTrend(item)) return ''
   return rowProfitInDisplay(item) >= 0 ? 'positive' : 'negative'
+}
+
+function hasProfitTrend(item: InvestmentItem) {
+  return String(item.type || '').trim().toLowerCase() !== 'cash'
 }
 
 function isDefensiveBarbellItem(item: InvestmentItem) {
@@ -679,7 +692,7 @@ function formatAllocation(value: number) {
           <h2>Holdings</h2>
           <span class="section-subtitle">Click any row to edit. Changes are saved when you close the editor.</span>
         </div>
-        <el-button type="primary" :icon="Plus" @click="addItem">Add Holding</el-button>
+        <el-button type="primary" plain :icon="Plus" @click="addItem">Add Holding</el-button>
       </div>
 
       <el-table
@@ -715,6 +728,20 @@ function formatAllocation(value: number) {
             <span>{{ row.currency || portfolio.currency }}</span>
           </template>
         </el-table-column>
+        <el-table-column label="Amount" min-width="150" align="right">
+          <template #default="{ row }">
+            <span>{{ formatMoney(investmentItemAmount(row), row.currency || portfolio.currency) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="P/L Trend" min-width="170" align="right">
+          <template #default="{ row }">
+            <div v-if="hasProfitTrend(row)" class="pl-cell" :class="rowProfitClass(row)">
+              <strong>{{ formatMoney(rowProfitInDisplay(row), displayCurrency) }}</strong>
+              <small>{{ formatPercent(rowProfitPercent(row)) }}</small>
+            </div>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="Shares" min-width="120" align="right">
           <template #default="{ row }">
             <span v-if="isShareBasedType(row.type)">{{ formatNumber(row.shares) }}</span>
@@ -731,19 +758,6 @@ function formatAllocation(value: number) {
           <template #default="{ row }">
             <span v-if="isShareBasedType(row.type)">{{ formatNumber(row.costBasis) }}</span>
             <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="Amount" min-width="150" align="right">
-          <template #default="{ row }">
-            <span>{{ formatMoney(investmentItemAmount(row), row.currency || portfolio.currency) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="P/L Trend" min-width="170" align="right">
-          <template #default="{ row }">
-            <div class="pl-cell" :class="rowProfitClass(row)">
-              <strong>{{ formatMoney(rowProfitInDisplay(row), displayCurrency) }}</strong>
-              <small>{{ formatPercent(rowProfitPercent(row)) }}</small>
-            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -765,7 +779,7 @@ function formatAllocation(value: number) {
           </div>
           <div class="dialog-summary" v-if="editorDraft">
             <span>Market {{ formatMoney(investmentItemAmount(editorDraft), editorDraft.currency || portfolio.currency) }}</span>
-            <span :class="rowProfitClass(editorDraft)">P/L {{ formatMoney(rowProfitInDisplay(editorDraft), displayCurrency) }}</span>
+            <span v-if="hasProfitTrend(editorDraft)" :class="rowProfitClass(editorDraft)">P/L {{ formatMoney(rowProfitInDisplay(editorDraft), displayCurrency) }}</span>
           </div>
         </div>
       </template>
