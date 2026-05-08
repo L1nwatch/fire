@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import { fetchFinanceState, saveFinanceStateToDb } from '../lib/api'
-import { currencyOptions, formatMoney } from '../lib/currency'
+import { convertMoney, currencyOptions, displayCurrency, formatMoney, normalizeCurrency } from '../lib/currency'
 import {
   emptyLedgerEntry,
   ledgerCategoryOptions,
@@ -31,6 +31,7 @@ interface PendingFinanceSave {
 
 interface TopLedgerEntry extends DailyLedgerEntry {
   normalizedAmount: number
+  displayAmount: number
   absoluteAmount: number
 }
 
@@ -82,10 +83,12 @@ const topLedgerEntries = computed<TopLedgerEntry[]>(() =>
   monthEntries.value
     .map((entry) => {
       const normalizedAmount = normalizeLedgerAmount(entry.category, entry.amount)
+      const displayAmount = convertMoney(normalizedAmount, normalizeCurrency(entry.currency || ledgerCurrency.value), displayCurrency.value)
       return {
         ...entry,
         normalizedAmount,
-        absoluteAmount: Math.abs(normalizedAmount),
+        displayAmount,
+        absoluteAmount: Math.abs(displayAmount),
       }
     })
     .filter((entry) => entry.absoluteAmount > 0)
@@ -452,8 +455,8 @@ function buildMonthDays(monthLabel: string): DayCard[] {
             <strong>{{ entry.category }}</strong>
             <small>{{ entry.date }} · {{ entry.notes || 'No description' }}</small>
           </div>
-          <b :class="entry.normalizedAmount >= 0 ? 'positive' : 'negative'">
-            {{ formatMoney(entry.normalizedAmount, entry.currency || ledgerCurrency) }}
+          <b :class="entry.displayAmount >= 0 ? 'positive' : 'negative'">
+            {{ formatMoney(entry.displayAmount, displayCurrency) }}
           </b>
         </div>
         <div v-if="topLedgerEntries.length === 0" class="ledger-top-item ledger-top-item--empty">
