@@ -61,6 +61,17 @@ const totalProfit = computed(() =>
   ),
 )
 const totalProfitPercent = computed(() => (Math.abs(totalCost.value) > 1e-9 ? (totalProfit.value / totalCost.value) * 100 : 0))
+const sortedHoldingItems = computed(() =>
+  [...portfolio.value.items].sort((a, b) => {
+    const aHasTrend = hasProfitTrend(a)
+    const bHasTrend = hasProfitTrend(b)
+    if (aHasTrend !== bHasTrend) return aHasTrend ? -1 : 1
+    if (!aHasTrend && !bHasTrend) return (a.name || a.symbol || '').localeCompare(b.name || b.symbol || '')
+    return Math.abs(rowProfitPercent(b)) - Math.abs(rowProfitPercent(a))
+      || Math.abs(rowProfitInDisplay(b)) - Math.abs(rowProfitInDisplay(a))
+      || (a.name || a.symbol || '').localeCompare(b.name || b.symbol || '')
+  }),
+)
 const vxnSeries = computed(() => marketSentiment.value?.vxn ?? null)
 const fearGreedSeries = computed(() => marketSentiment.value?.fearGreed ?? null)
 const vxnSignal = computed(() => {
@@ -696,7 +707,7 @@ function formatAllocation(value: number) {
       </div>
 
       <el-table
-        :data="portfolio.items"
+        :data="sortedHoldingItems"
         size="large"
         class="data-table holdings-table investment-list-table"
         table-layout="fixed"
