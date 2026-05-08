@@ -29,6 +29,11 @@ interface PendingFinanceSave {
   updatedAt: string
 }
 
+interface TopLedgerEntry extends DailyLedgerEntry {
+  normalizedAmount: number
+  absoluteAmount: number
+}
+
 type SaveStatus = 'idle' | 'saving' | 'pending' | 'failed'
 
 const pendingFinanceSaveKey = 'fire.dailyLedger.pendingFinanceSave.v1'
@@ -73,6 +78,20 @@ const ledger = computed(() => monthEntries.value.filter((entry) => entry.date ==
 const monthSummary = computed(() => summarizeLedger(monthEntries.value, ledgerCurrency.value))
 const daySummary = computed(() => summarizeLedger(ledger.value, ledgerCurrency.value))
 const monthDays = computed<DayCard[]>(() => buildMonthDays(selectedMonth.value))
+const topLedgerEntries = computed<TopLedgerEntry[]>(() =>
+  monthEntries.value
+    .map((entry) => {
+      const normalizedAmount = normalizeLedgerAmount(entry.category, entry.amount)
+      return {
+        ...entry,
+        normalizedAmount,
+        absoluteAmount: Math.abs(normalizedAmount),
+      }
+    })
+    .filter((entry) => entry.absoluteAmount > 0)
+    .sort((a, b) => b.absoluteAmount - a.absoluteAmount || b.date.localeCompare(a.date))
+    .slice(0, 10),
+)
 
 watch(
   finance,
@@ -417,6 +436,28 @@ function buildMonthDays(monthLabel: string): DayCard[] {
             <span><em>Expense</em> <b class="negative">{{ formatMoney(day.expense, ledgerCurrency) }}</b></span>
           </div>
           <div class="ledger-day-footer">{{ day.events }} event{{ day.events === 1 ? '' : 's' }}</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel ledger-top-list">
+      <div class="section-head">
+        <h2>Top 10 Amounts</h2>
+        <span>{{ selectedMonth || '-' }}</span>
+      </div>
+      <div class="ledger-top-list__body">
+        <div v-for="(entry, index) in topLedgerEntries" :key="entry.id" class="ledger-top-item">
+          <span class="ledger-top-item__rank">{{ index + 1 }}</span>
+          <div class="ledger-top-item__main">
+            <strong>{{ entry.category }}</strong>
+            <small>{{ entry.date }} · {{ entry.notes || 'No description' }}</small>
+          </div>
+          <b :class="entry.normalizedAmount >= 0 ? 'positive' : 'negative'">
+            {{ formatMoney(entry.normalizedAmount, entry.currency || ledgerCurrency) }}
+          </b>
+        </div>
+        <div v-if="topLedgerEntries.length === 0" class="ledger-top-item ledger-top-item--empty">
+          No income or expense entries for this month.
         </div>
       </div>
     </section>
