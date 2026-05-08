@@ -43,6 +43,8 @@ export interface InvestmentState {
   snapshots: InvestmentSnapshot[]
 }
 
+export type InvestmentCategoryFilter = 'available' | 'locked' | 'liability' | 'all'
+
 export const emptyInvestmentState = (): InvestmentState => ({
   snapshots: [],
 })
@@ -51,7 +53,9 @@ export function createInvestmentItem(item?: Partial<InvestmentItem>, defaultCurr
   const type = normalizeInvestmentType(item?.type, 'Cash')
   const shares = Number.isFinite(item?.shares) ? Number(item?.shares) : 0
   const unitPrice = Number.isFinite(item?.unitPrice) ? Number(item?.unitPrice) : 0
-  const amount = Number.isFinite(item?.amount) ? Number(item?.amount) : 0
+  const category = normalizeInvestmentCategory(item?.category)
+  const rawAmount = Number.isFinite(item?.amount) ? Number(item?.amount) : 0
+  const amount = normalizeInvestmentAmount(category, rawAmount)
   const isShareBased = isShareBasedType(type)
   const multiplier = investmentContractMultiplier(type)
   const defaultCostBasis = isShareBased
@@ -65,7 +69,7 @@ export function createInvestmentItem(item?: Partial<InvestmentItem>, defaultCurr
     symbol: item?.symbol ?? '',
     account: item?.account ?? '',
     type,
-    category: normalizeInvestmentCategory(item?.category),
+    category,
     shares,
     unitPrice,
     costBasis: normalizedCostBasis,
@@ -77,14 +81,23 @@ export function createInvestmentItem(item?: Partial<InvestmentItem>, defaultCurr
 
 export function normalizeInvestmentCategory(category?: string) {
   if (!category) return 'Available'
+  if (category === 'Liability' || category === 'Debt' || category === 'Debit' || category === 'Credit Card') return 'Liability'
   if (category === 'Locked' || category === 'Retirement' || category === 'Housing Fund' || category === 'Insurance' || category === 'Deposit') return 'Locked'
   return 'Available'
+}
+
+export function normalizeInvestmentAmount(category?: string, amount?: number) {
+  const value = Number(amount)
+  const normalizedAmount = Number.isFinite(value) ? Math.abs(value) : 0
+  return normalizeInvestmentCategory(category) === 'Liability' ? -normalizedAmount : normalizedAmount
 }
 
 export function normalizeInvestmentType(type?: string, fallback = 'Other') {
   if (!type) return fallback
   const value = String(type).trim().toLowerCase()
   if (value === 'cash') return 'Cash'
+  if (value === 'credit card' || value === 'credit-card' || value === 'card') return 'Credit Card'
+  if (value === 'loan' || value === 'debt' || value === 'liability') return 'Loan'
   if (value === 'stock') return 'Stock'
   if (value === 'etf') return 'ETF'
   if (value === 'option') return 'Option'
@@ -151,7 +164,7 @@ export function snapshotTotal(snapshot: InvestmentSnapshot | undefined, targetCu
 export function snapshotTotalByCategory(
   snapshot: InvestmentSnapshot | undefined,
   targetCurrency: CurrencyCode,
-  category: 'available' | 'locked' | 'all',
+  category: InvestmentCategoryFilter,
 ) {
   if (!snapshot) return 0
   return roundMoney(
@@ -159,8 +172,12 @@ export function snapshotTotalByCategory(
       const normalizedCategory = normalizeInvestmentCategory(item.category)
       if (category === 'available' && normalizedCategory !== 'Available') return sum
       if (category === 'locked' && normalizedCategory !== 'Locked') return sum
+      if (category === 'liability' && normalizedCategory !== 'Liability') return sum
       const itemCurrency = normalizeCurrency(item.currency || snapshot.currency || targetCurrency)
-      return sum + convertMoney(investmentItemAmount(item), itemCurrency, targetCurrency)
+      const amount = normalizedCategory === 'Liability'
+        ? normalizeInvestmentAmount(normalizedCategory, investmentItemAmount(item))
+        : investmentItemAmount(item)
+      return sum + convertMoney(amount, itemCurrency, targetCurrency)
     }, 0),
   )
 }
@@ -176,7 +193,7 @@ export function trendPoints(state: InvestmentState, targetCurrency: CurrencyCode
 export function trendPointsByCategory(
   state: InvestmentState,
   targetCurrency: CurrencyCode,
-  category: 'available' | 'locked' | 'all',
+  category: InvestmentCategoryFilter,
 ) {
   return [...state.snapshots]
     .sort((a, b) => a.date.localeCompare(b.date))

@@ -646,8 +646,16 @@ def normalize_investment_type(item_type: str | None, name: str | None = "") -> s
     value = (item_type or "").strip().lower()
     if value in {"cash", "stock", "etf", "option", "bond", "crypto", "fund", "other"}:
         return value.upper() if value == "etf" else value.title()
+    if value in {"credit card", "credit-card", "card"}:
+        return "Credit Card"
+    if value in {"loan", "debt", "liability"}:
+        return "Loan"
 
     name_value = (name or "").strip().lower()
+    if any(token in name_value for token in ("credit card", "card bill", "debit bill")):
+        return "Credit Card"
+    if any(token in name_value for token in ("loan", "debt", "liability")):
+        return "Loan"
     if any(token in name_value for token in ("cash", "bank", "savings", "wallet")):
         return "Cash"
     if any(token in name_value for token in ("etf", "index")):
@@ -663,6 +671,21 @@ def normalize_investment_type(item_type: str | None, name: str | None = "") -> s
     if any(token in name_value for token in ("stock", "equity", "share")):
         return "Stock"
     return "Other"
+
+
+def normalize_investment_category(category: str | None) -> str:
+    value = (category or "").strip()
+    lower_value = value.lower()
+    if lower_value in {"liability", "debt", "debit", "credit card"}:
+        return "Liability"
+    if value in {"Locked", "Retirement", "Housing Fund", "Insurance", "Deposit"}:
+        return "Locked"
+    return "Available"
+
+
+def normalize_investment_amount(category: str | None, amount: float) -> float:
+    value = abs(float(amount or 0))
+    return -value if normalize_investment_category(category) == "Liability" else value
 
 
 def is_share_based_type(item_type: str | None) -> bool:
@@ -888,6 +911,7 @@ def _save_snapshot_state(conn: sqlite3.Connection, state: dict[str, Any], snapsh
         )
         for position, item in enumerate(snapshot.get("items", [])):
             item_type = normalize_investment_type(item.get("type", ""), item.get("name", ""))
+            item_category = normalize_investment_category(item.get("category", ""))
             shares = float(item.get("shares") or 0)
             unit_price = float(item.get("unitPrice") or item.get("unit_price") or 0)
             input_cost_basis = float(item.get("costBasis") or item.get("cost_basis") or 0)
@@ -895,6 +919,7 @@ def _save_snapshot_state(conn: sqlite3.Connection, state: dict[str, Any], snapsh
             multiplier = investment_contract_multiplier(item_type)
             computed_amount = shares * unit_price * multiplier
             amount = computed_amount if is_share_based_type(item_type) and abs(computed_amount) > 1e-9 else input_amount
+            amount = normalize_investment_amount(item_category, amount)
             if is_share_based_type(item_type):
                 cost_basis = input_cost_basis if abs(input_cost_basis) > 1e-9 else unit_price
             else:
@@ -912,7 +937,7 @@ def _save_snapshot_state(conn: sqlite3.Connection, state: dict[str, Any], snapsh
                     item.get("symbol", ""),
                     item.get("account", ""),
                     item_type,
-                    item.get("category", ""),
+                    item_category,
                     shares,
                     unit_price,
                     cost_basis,

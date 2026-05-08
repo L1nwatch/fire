@@ -12,10 +12,13 @@ import {
   emptyInvestmentState,
   investmentCategoryOptions,
   investmentTypeOptions,
+  normalizeInvestmentAmount,
+  normalizeInvestmentCategory,
   snapshotTotal,
   snapshotTotalByCategory,
   sortedSnapshots,
   trendPointsByCategory,
+  type InvestmentCategoryFilter,
   type InvestmentSnapshot,
   type InvestmentState,
 } from '../lib/investments'
@@ -30,13 +33,15 @@ const chartEl = ref<HTMLDivElement | null>(null)
 const activeChartPoint = ref<{ date: string; displayTotal: number } | null>(null)
 const historyPage = ref(1)
 const historyPageSize = 10
-const totalDisplayMode = ref<'available' | 'locked' | 'all'>('available')
+const totalDisplayMode = ref<InvestmentCategoryFilter>('available')
 let chart: ECharts | null = null
 
 const isPortfolioMode = computed(() => route.path.startsWith('/investment'))
 const titleNoun = computed(() => (isPortfolioMode.value ? 'investment' : 'asset'))
 const titleLabel = computed(() => `${titleNoun.value.charAt(0).toUpperCase()}${titleNoun.value.slice(1)}`)
-const totalLabel = computed(() => (isPortfolioMode.value ? 'All Investments' : 'All Assets'))
+const totalLabel = computed(() => (isPortfolioMode.value ? 'All Investments' : 'Net Assets'))
+const itemTypeOptions = computed(() => (isPortfolioMode.value ? investmentTypeOptions : [...investmentTypeOptions, 'Credit Card', 'Loan']))
+const itemCategoryOptions = computed(() => (isPortfolioMode.value ? investmentCategoryOptions : [...investmentCategoryOptions, 'Liability']))
 
 const snapshots = computed(() => sortedSnapshots(investments.value))
 const pagedSnapshots = computed(() => {
@@ -47,6 +52,7 @@ const latestSnapshot = computed(() => snapshots.value[0])
 const selectedSnapshot = computed<InvestmentSnapshot | undefined>(() => snapshots.value.find((snapshot) => snapshot.id === selectedSnapshotId.value) ?? latestSnapshot.value)
 const latestAvailableTotal = computed(() => snapshotTotalByCategory(latestSnapshot.value, displayCurrency.value, 'available'))
 const latestLockedTotal = computed(() => snapshotTotalByCategory(latestSnapshot.value, displayCurrency.value, 'locked'))
+const latestLiabilityTotal = computed(() => snapshotTotalByCategory(latestSnapshot.value, displayCurrency.value, 'liability'))
 const latestTotal = computed(() => snapshotTotal(latestSnapshot.value, displayCurrency.value))
 const latestDisplayedTotal = computed(() => snapshotTotalByCategory(latestSnapshot.value, displayCurrency.value, totalDisplayMode.value))
 const selectedTotal = computed(() => snapshotTotal(selectedSnapshot.value, displayCurrency.value))
@@ -118,6 +124,7 @@ watch([chartSeries, displayCurrency], () => {
 
 const displayModeLabel = computed(() => {
   if (totalDisplayMode.value === 'locked') return 'Locked'
+  if (totalDisplayMode.value === 'liability') return 'Liabilities'
   if (totalDisplayMode.value === 'all') return 'All'
   return 'Available'
 })
@@ -168,9 +175,38 @@ function addItem() {
   selectedSnapshot.value.items.push(createInvestmentItem(undefined, displayCurrency.value))
 }
 
+function addLiability() {
+  if (!selectedSnapshot.value) return
+  selectedSnapshot.value.items.push(
+    createInvestmentItem(
+      {
+        name: 'Debit bill',
+        type: 'Credit Card',
+        category: 'Liability',
+        amount: 0,
+        notes: '',
+      },
+      displayCurrency.value,
+    ),
+  )
+}
+
 function removeItem(id: string) {
   if (!selectedSnapshot.value) return
   selectedSnapshot.value.items = selectedSnapshot.value.items.filter((item) => item.id !== id)
+}
+
+function normalizeItemAmount(row: { category: string; amount: number }) {
+  row.category = normalizeInvestmentCategory(row.category)
+  row.amount = normalizeInvestmentAmount(row.category, row.amount)
+}
+
+function itemAmountMin(row: { category: string }) {
+  return normalizeInvestmentCategory(row.category) === 'Liability' ? undefined : 0
+}
+
+function itemAmountMax(row: { category: string }) {
+  return normalizeInvestmentCategory(row.category) === 'Liability' ? 0 : undefined
 }
 
 function initChart() {
@@ -306,6 +342,7 @@ function percent(value: number) {
               :options="[
                 { label: 'Available', value: 'available' },
                 { label: 'Locked', value: 'locked' },
+                { label: 'Liabilities', value: 'liability' },
                 { label: 'All', value: 'all' },
               ]"
             />
@@ -334,6 +371,10 @@ function percent(value: number) {
           <div class="asset-summary-item">
             <span>Locked</span>
             <strong>{{ formatMoney(latestLockedTotal, displayCurrency) }}</strong>
+          </div>
+          <div class="asset-summary-item">
+            <span>Liabilities</span>
+            <strong class="negative">{{ formatMoney(latestLiabilityTotal, displayCurrency) }}</strong>
           </div>
           <div class="asset-summary-item">
             <span>{{ totalLabel }}</span>
@@ -427,25 +468,26 @@ function percent(value: number) {
 
         <div class="actions snapshot-actions">
           <el-button :icon="Plus" @click="addItem">Add {{ titleLabel }}</el-button>
+          <el-button v-if="!isPortfolioMode" :icon="Plus" type="warning" plain @click="addLiability">Add Debit Bill</el-button>
         </div>
 
         <el-table :data="selectedSnapshot.items" size="large" class="data-table holdings-table" table-layout="fixed" max-height="56vh">
-          <el-table-column label="Asset" min-width="190">
+          <el-table-column :label="isPortfolioMode ? 'Asset' : 'Asset / Bill'" min-width="190">
             <template #default="{ row }">
-              <el-input v-model="row.name" placeholder="WS-TFSA, IBKR, Cash" />
+              <el-input v-model="row.name" placeholder="WS-TFSA, IBKR, Cash, Credit card bill" />
             </template>
           </el-table-column>
           <el-table-column label="Type" min-width="140">
             <template #default="{ row }">
               <el-select v-model="row.type" filterable allow-create default-first-option>
-                <el-option v-for="itemType in investmentTypeOptions" :key="itemType" :label="itemType" :value="itemType" />
+                <el-option v-for="itemType in itemTypeOptions" :key="itemType" :label="itemType" :value="itemType" />
               </el-select>
             </template>
           </el-table-column>
           <el-table-column label="Category" min-width="150">
             <template #default="{ row }">
-              <el-select v-model="row.category" filterable allow-create default-first-option>
-                <el-option v-for="category in investmentCategoryOptions" :key="category" :label="category" :value="category" />
+              <el-select v-model="row.category" filterable allow-create default-first-option @change="normalizeItemAmount(row)">
+                <el-option v-for="category in itemCategoryOptions" :key="category" :label="category" :value="category" />
               </el-select>
             </template>
           </el-table-column>
@@ -458,7 +500,15 @@ function percent(value: number) {
           </el-table-column>
           <el-table-column label="Amount" min-width="160" align="right">
             <template #default="{ row }">
-              <el-input-number v-model="row.amount" :precision="2" :controls="false" />
+              <el-input-number
+                v-model="row.amount"
+                :precision="2"
+                :controls="false"
+                :min="itemAmountMin(row)"
+                :max="itemAmountMax(row)"
+                @change="normalizeItemAmount(row)"
+                @blur="normalizeItemAmount(row)"
+              />
             </template>
           </el-table-column>
           <el-table-column label="Notes" min-width="220">
