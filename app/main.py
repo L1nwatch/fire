@@ -107,10 +107,10 @@ def get_market_quote(symbol: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Symbol is required")
 
     is_canadian_symbol = normalized.endswith((".CA", ".TO", ".TSX"))
-    provider_order = [_fetch_yahoo_quote, _fetch_stooq_quote]
+    provider_order = [_fetch_yahoo_quote, _fetch_nasdaq_stock_quote, _fetch_stooq_quote]
     if _is_occ_option_symbol(normalized):
         # For full option contract symbols, try Nasdaq option-chain delayed quote first.
-        provider_order = [_fetch_nasdaq_option_quote, _fetch_yahoo_quote, _fetch_stooq_quote]
+        provider_order = [_fetch_nasdaq_option_quote, _fetch_yahoo_quote, _fetch_nasdaq_stock_quote, _fetch_stooq_quote]
     if is_canadian_symbol:
         # For Canadian symbols, prefer TMX over Stooq to avoid US cross-listing mismatches.
         provider_order = [_fetch_yahoo_quote, _fetch_tmx_quote, _fetch_stooq_quote]
@@ -349,6 +349,43 @@ def _fetch_yahoo_quote(symbol: str) -> dict[str, Any]:
         "price": float(price),
         "currency": quote.get("currency", "USD"),
         "source": "Yahoo Finance",
+    }
+
+
+def _fetch_nasdaq_stock_quote(symbol: str) -> dict[str, Any]:
+    if "." in symbol or _is_occ_option_symbol(symbol):
+        raise HTTPException(status_code=404, detail=f"Nasdaq stock quote not supported for {symbol}")
+
+    url = f"https://api.nasdaq.com/api/quote/{quote_plus(symbol)}/info?assetclass=stocks"
+    try:
+        request = Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 FireApp/1.0",
+                "Accept": "application/json",
+            },
+        )
+        with urlopen(request, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as error:
+        raise HTTPException(status_code=502, detail=f"Nasdaq quote provider error: {error.code}") from error
+    except URLError as error:
+        raise HTTPException(status_code=502, detail=f"Nasdaq quote provider unavailable: {error.reason}") from error
+    except Exception as error:  # pragma: no cover - defensive
+        raise HTTPException(status_code=502, detail="Failed to fetch Nasdaq quote") from error
+
+    data = payload.get("data") or {}
+    primary = data.get("primaryData") or {}
+    raw_price = str(primary.get("lastSalePrice") or "").strip()
+    match = re.search(r"([0-9][0-9,]*(?:\.[0-9]+)?)", raw_price)
+    if not match:
+        raise HTTPException(status_code=404, detail=f"No Nasdaq market price for {symbol}")
+
+    return {
+        "symbol": data.get("symbol") or symbol,
+        "price": float(match.group(1).replace(",", "")),
+        "currency": "USD",
+        "source": "Nasdaq",
     }
 
 
