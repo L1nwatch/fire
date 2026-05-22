@@ -102,7 +102,7 @@ def put_portfolio(state: dict[str, Any]) -> dict[str, bool]:
 
 @app.get("/api/market/quote")
 def get_market_quote(symbol: str) -> dict[str, Any]:
-    normalized = (symbol or "").strip().upper()
+    normalized = _normalize_market_symbol(symbol)
     if not normalized:
         raise HTTPException(status_code=400, detail="Symbol is required")
 
@@ -123,6 +123,20 @@ def get_market_quote(symbol: str) -> dict[str, Any]:
             errors.append(str(error.detail))
 
     raise HTTPException(status_code=502, detail=f"Quote fetch failed ({'; '.join(errors)})")
+
+
+def _normalize_market_symbol(symbol: str) -> str:
+    normalized = (symbol or "").strip().upper()
+    aliases = {
+        "NVIDIA": "NVDA",
+        "NVIDIA CORP": "NVDA",
+        "NVIDIA CORPORATION": "NVDA",
+        "NVDA.CA": "NVDA",
+        "NVDA.TO": "NVDA",
+        "NVDA.TSX": "NVDA",
+        "NVDA.NE": "NVDA",
+    }
+    return aliases.get(normalized, normalized)
 
 
 @app.get("/api/market/sentiment")
