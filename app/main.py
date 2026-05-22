@@ -106,11 +106,12 @@ def get_market_quote(symbol: str) -> dict[str, Any]:
     if not normalized:
         raise HTTPException(status_code=400, detail="Symbol is required")
 
-    provider_order = [_fetch_yahoo_quote, _fetch_stooq_quote, _fetch_tmx_quote]
+    is_canadian_symbol = normalized.endswith((".CA", ".TO", ".TSX"))
+    provider_order = [_fetch_yahoo_quote, _fetch_stooq_quote]
     if _is_occ_option_symbol(normalized):
         # For full option contract symbols, try Nasdaq option-chain delayed quote first.
-        provider_order = [_fetch_nasdaq_option_quote, _fetch_yahoo_quote, _fetch_stooq_quote, _fetch_tmx_quote]
-    if normalized.endswith((".CA", ".TO", ".TSX")):
+        provider_order = [_fetch_nasdaq_option_quote, _fetch_yahoo_quote, _fetch_stooq_quote]
+    if is_canadian_symbol:
         # For Canadian symbols, prefer TMX over Stooq to avoid US cross-listing mismatches.
         provider_order = [_fetch_yahoo_quote, _fetch_tmx_quote, _fetch_stooq_quote]
 
