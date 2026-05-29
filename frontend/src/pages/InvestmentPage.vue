@@ -523,9 +523,11 @@ function isDefensiveBarbellItem(item: InvestmentItem) {
   const normalizedType = String(item.type || '').trim().toLowerCase()
   const normalizedName = String(item.name || '').trim().toLowerCase()
   const normalizedSymbol = String(item.symbol || '').trim().toLowerCase()
+  const defensiveSymbols = new Set(['cbil', 'sgov'])
   if (normalizedType === 'cash') return true
-  if (normalizedName.includes('cbil')) return true
-  if (normalizedSymbol === 'cbil' || normalizedSymbol.startsWith('cbil.')) return true
+  if (normalizedName.includes('cbil') || normalizedName.includes('sgov')) return true
+  if (normalizedName.includes('treasury bill') || normalizedName.includes('t-bill')) return true
+  if (defensiveSymbols.has(normalizedSymbol) || [...defensiveSymbols].some((symbol) => normalizedSymbol.startsWith(`${symbol}.`))) return true
   return false
 }
 
@@ -652,7 +654,7 @@ function formatAllocation(value: number) {
       <div class="section-head">
         <div>
           <h2>Barbell Allocation</h2>
-          <span class="section-subtitle">Defensive side (Cash + CBIL) vs growth side (equities/options and others).</span>
+          <span class="section-subtitle">Defensive side (Cash + T-bill ETFs) vs growth side (equities/options and others).</span>
         </div>
       </div>
       <div class="asset-groups barbell-groups">
