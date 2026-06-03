@@ -49,6 +49,18 @@ const saveStatus = ref<SaveStatus>('idle')
 const isSaving = ref(false)
 const retryIntervalId = ref<number>()
 const route = useRoute()
+const saveNotice = computed(() => {
+  if (saveError.value) {
+    return { title: saveError.value, type: 'warning' as const }
+  }
+  if (saveStatus.value === 'saving') {
+    return { title: 'Uploading Daily Ledger changes...', type: 'info' as const }
+  }
+  if (saveStatus.value === 'pending') {
+    return { title: 'Daily Ledger edits are saved in this browser and waiting to upload.', type: 'warning' as const }
+  }
+  return null
+})
 
 const monthOptions = computed(() => {
   const options = new Set<string>()
@@ -390,23 +402,17 @@ function buildMonthDays(monthLabel: string): DayCard[] {
       </div>
     </div>
 
-    <el-alert v-if="saveError" :title="saveError" type="warning" show-icon :closable="false" class="page-alert" />
-    <el-alert
-      v-else-if="saveStatus === 'saving'"
-      title="Uploading Daily Ledger changes..."
-      type="info"
-      show-icon
-      :closable="false"
-      class="page-alert"
-    />
-    <el-alert
-      v-else-if="saveStatus === 'pending'"
-      title="Daily Ledger edits are saved in this browser and waiting to upload."
-      type="warning"
-      show-icon
-      :closable="false"
-      class="page-alert"
-    />
+    <transition name="ledger-save-toast">
+      <div v-if="saveNotice" class="ledger-save-toast">
+        <el-alert
+          :title="saveNotice.title"
+          :type="saveNotice.type"
+          show-icon
+          :closable="false"
+          class="ledger-save-alert"
+        />
+      </div>
+    </transition>
 
     <div class="sheet-summary">
       <span>Month {{ selectedMonth || '-' }}</span>

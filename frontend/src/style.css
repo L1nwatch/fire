@@ -164,6 +164,34 @@ body {
   margin-bottom: 14px;
 }
 
+.ledger-save-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 2400;
+  width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.ledger-save-alert {
+  pointer-events: auto;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(31, 36, 48, 0.18);
+}
+
+.ledger-save-toast-enter-active,
+.ledger-save-toast-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.ledger-save-toast-enter-from,
+.ledger-save-toast-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
