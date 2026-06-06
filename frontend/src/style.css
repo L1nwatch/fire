@@ -382,6 +382,15 @@ body {
   font-size: 10px;
 }
 
+.barbell-item-details {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 8px;
+  max-width: 260px;
+  line-height: 1.25;
+}
+
 .risk-list,
 .mover-list,
 .asset-list,

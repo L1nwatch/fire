@@ -121,7 +121,15 @@ const barbellBreakdown = computed(() => {
   const aggressiveCost = aggressiveEntries.reduce((sum, entry) => sum + entry.cost, 0)
   const defensiveProfit = defensiveTotal - defensiveCost
   const aggressiveProfit = aggressiveTotal - aggressiveCost
-  const withShare = (entry: (typeof entries)[number]) => ({ ...entry, share: total ? entry.value / total : 0 })
+  const withShare = (entry: (typeof entries)[number]) => {
+    const profit = entry.value - entry.cost
+    return {
+      ...entry,
+      profit,
+      profitPercent: Math.abs(entry.cost) > 1e-9 ? (profit / entry.cost) * 100 : 0,
+      share: total ? entry.value / total : 0,
+    }
+  }
   const visibleItems = (items: typeof entries) =>
     items
       .map(withShare)
@@ -708,7 +716,13 @@ function formatAllocation(value: number) {
               <span>{{ item.label }}</span>
               <div class="barbell-row-values">
                 <strong>{{ formatMoney(item.value, displayCurrency) }}</strong>
-                <small>{{ formatAllocation(item.share) }}</small>
+                <small class="barbell-item-details">
+                  <span>{{ formatAllocation(item.share) }}</span>
+                  <span>Cost {{ formatMoney(item.cost, displayCurrency) }}</span>
+                  <span :class="{ positive: item.profitPercent >= 0, negative: item.profitPercent < 0 }">
+                    P/L {{ formatPercent(item.profitPercent) }}
+                  </span>
+                </small>
               </div>
             </div>
             <div v-if="!barbellBreakdown.aggressive.items.length" class="asset-row barbell-item-row empty">No growth/options holdings yet.</div>
