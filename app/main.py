@@ -626,10 +626,6 @@ def _extract_nasdaq_option_price(payload: dict[str, Any], strike: float, option_
     if strike_match is None:
         raise HTTPException(status_code=404, detail=f"No Nasdaq option row for strike {strike:.3f}")
 
-    last_value = _parse_numeric(strike_match.get(f"{target_key}_Last"))
-    if last_value is not None and last_value > 0:
-        return float(last_value)
-
     bid = _parse_numeric(strike_match.get(f"{target_key}_Bid"))
     ask = _parse_numeric(strike_match.get(f"{target_key}_Ask"))
     if bid is not None and ask is not None and bid > 0 and ask > 0:
@@ -638,6 +634,10 @@ def _extract_nasdaq_option_price(payload: dict[str, Any], strike: float, option_
         return float(bid)
     if ask is not None and ask > 0:
         return float(ask)
+
+    last_value = _parse_numeric(strike_match.get(f"{target_key}_Last"))
+    if last_value is not None and last_value > 0:
+        return float(last_value)
     raise HTTPException(status_code=404, detail="No valid Nasdaq option price fields")
 
 
