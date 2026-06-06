@@ -312,6 +312,13 @@ body {
   text-transform: none;
 }
 
+.barbell-head-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  line-height: 1.25;
+}
+
 .asset-group-head strong {
   color: var(--accent-strong);
   font-size: 18px;

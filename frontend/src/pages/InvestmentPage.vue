@@ -101,10 +101,12 @@ const barbellBreakdown = computed(() => {
     .map((item) => {
       const sourceCurrency = normalizeCurrency(item.currency || portfolio.value.currency || displayCurrency.value)
       const value = convertMoney(investmentItemAmount(item), sourceCurrency, displayCurrency.value)
+      const cost = convertMoney(investmentItemCost(item), sourceCurrency, displayCurrency.value)
       return {
         id: item.id,
         label: item.name || item.symbol || 'Untitled',
         value,
+        cost,
         defensive: isDefensiveBarbellItem(item),
       }
     })
@@ -115,6 +117,10 @@ const barbellBreakdown = computed(() => {
   const aggressiveEntries = entries.filter((entry) => !entry.defensive).sort((a, b) => b.value - a.value)
   const defensiveTotal = defensiveEntries.reduce((sum, entry) => sum + entry.value, 0)
   const aggressiveTotal = aggressiveEntries.reduce((sum, entry) => sum + entry.value, 0)
+  const defensiveCost = defensiveEntries.reduce((sum, entry) => sum + entry.cost, 0)
+  const aggressiveCost = aggressiveEntries.reduce((sum, entry) => sum + entry.cost, 0)
+  const defensiveProfit = defensiveTotal - defensiveCost
+  const aggressiveProfit = aggressiveTotal - aggressiveCost
   const withShare = (entry: (typeof entries)[number]) => ({ ...entry, share: total ? entry.value / total : 0 })
   const visibleItems = (items: typeof entries) =>
     items
@@ -125,11 +131,17 @@ const barbellBreakdown = computed(() => {
     total,
     defensive: {
       total: defensiveTotal,
+      cost: defensiveCost,
+      profit: defensiveProfit,
+      profitPercent: Math.abs(defensiveCost) > 1e-9 ? (defensiveProfit / defensiveCost) * 100 : 0,
       share: total ? defensiveTotal / total : 0,
       items: visibleItems(defensiveEntries),
     },
     aggressive: {
       total: aggressiveTotal,
+      cost: aggressiveCost,
+      profit: aggressiveProfit,
+      profitPercent: Math.abs(aggressiveCost) > 1e-9 ? (aggressiveProfit / aggressiveCost) * 100 : 0,
       share: total ? aggressiveTotal / total : 0,
       items: visibleItems(aggressiveEntries),
     },
@@ -681,7 +693,13 @@ function formatAllocation(value: number) {
           <div class="asset-group-head">
             <div>
               <span>Growth / Options</span>
-              <small>{{ formatAllocation(barbellBreakdown.aggressive.share) }} of portfolio</small>
+              <small class="barbell-head-details">
+                <span>{{ formatAllocation(barbellBreakdown.aggressive.share) }} of portfolio</span>
+                <span>Cost {{ formatMoney(barbellBreakdown.aggressive.cost, displayCurrency) }}</span>
+                <span :class="{ positive: barbellBreakdown.aggressive.profitPercent >= 0, negative: barbellBreakdown.aggressive.profitPercent < 0 }">
+                  P/L {{ formatPercent(barbellBreakdown.aggressive.profitPercent) }}
+                </span>
+              </small>
             </div>
             <strong>{{ formatMoney(barbellBreakdown.aggressive.total, displayCurrency) }}</strong>
           </div>
