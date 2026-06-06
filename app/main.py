@@ -135,8 +135,19 @@ def _normalize_market_symbol(symbol: str) -> str:
         "NVDA.TO": "NVDA",
         "NVDA.TSX": "NVDA",
         "NVDA.NE": "NVDA",
+        "CBIL": "CBIL.TO",
+        "CBIL.CA": "CBIL.TO",
+        "CBIL.TSX": "CBIL.TO",
+        "CBIL.TO": "CBIL.TO",
+        "CBIL ETF": "CBIL.TO",
     }
-    return aliases.get(normalized, normalized)
+    if normalized in aliases:
+        return aliases[normalized]
+
+    if re.search(r"\bCBIL\b", normalized):
+        return "CBIL.TO"
+
+    return normalized
 
 
 @app.get("/api/market/sentiment")
