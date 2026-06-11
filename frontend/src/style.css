@@ -277,6 +277,7 @@ body {
   border-radius: 8px;
   padding: 12px;
   background: linear-gradient(180deg, #ffffff, #fbfcfa);
+  min-width: 0;
 }
 
 .asset-group.available {
@@ -298,11 +299,13 @@ body {
   font-size: 13px;
   font-weight: 800;
   text-transform: uppercase;
+  min-width: 0;
 }
 
 .asset-group-head div {
   display: grid;
   gap: 2px;
+  min-width: 0;
 }
 
 .asset-group-head small {
@@ -324,6 +327,7 @@ body {
   font-size: 18px;
   line-height: 1.15;
   text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .asset-group.locked .asset-group-head strong {
@@ -343,6 +347,8 @@ body {
   display: grid;
   justify-items: end;
   gap: 2px;
+  min-width: 0;
+  text-align: right;
 }
 
 .barbell-list {
@@ -356,6 +362,7 @@ body {
   gap: 8px;
   font-size: 12px;
   line-height: 1.15;
+  min-width: 0;
 }
 
 .barbell-item-row > span {
@@ -371,6 +378,7 @@ body {
 .barbell-item-row .barbell-row-values strong {
   font-size: 12px;
   line-height: 1.1;
+  overflow-wrap: anywhere;
 }
 
 .barbell-row-values small {
@@ -412,6 +420,7 @@ body {
   border-radius: 8px;
   padding: 10px 12px;
   background: #fbfcfa;
+  min-width: 0;
 }
 
 .asset-row.empty {
@@ -1219,6 +1228,50 @@ body {
 }
 
 @media (max-width: 640px) {
+  .content {
+    padding: 16px;
+  }
+
+  .barbell-panel {
+    overflow: hidden;
+  }
+
+  .barbell-groups {
+    gap: 12px;
+  }
+
+  .barbell-groups .asset-group {
+    padding: 10px;
+  }
+
+  .barbell-groups .asset-group-head {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .barbell-groups .asset-group-head strong {
+    max-width: 52%;
+    font-size: 17px;
+  }
+
+  .barbell-item-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .barbell-item-row > span {
+    flex: 1 1 120px;
+    min-width: 0;
+  }
+
+  .barbell-item-row .barbell-row-values {
+    flex: 1 1 128px;
+  }
+
+  .barbell-item-details {
+    max-width: 100%;
+  }
+
   .ledger-calendar-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
