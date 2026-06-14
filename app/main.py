@@ -367,13 +367,27 @@ def _fetch_nasdaq_stock_quote(symbol: str) -> dict[str, Any]:
     if "." in symbol or _is_occ_option_symbol(symbol):
         raise HTTPException(status_code=404, detail=f"Nasdaq stock quote not supported for {symbol}")
 
-    url = f"https://api.nasdaq.com/api/quote/{quote_plus(symbol)}/info?assetclass=stocks"
+    errors: list[str] = []
+    for asset_class in ("stocks", "etf"):
+        try:
+            return _fetch_nasdaq_quote_for_asset_class(symbol, asset_class)
+        except HTTPException as error:
+            errors.append(str(error.detail))
+
+    raise HTTPException(status_code=404, detail=f"No Nasdaq market price for {symbol} ({'; '.join(errors)})")
+
+
+def _fetch_nasdaq_quote_for_asset_class(symbol: str, asset_class: str) -> dict[str, Any]:
+    url = f"https://api.nasdaq.com/api/quote/{quote_plus(symbol)}/info?assetclass={asset_class}"
     try:
         request = Request(
             url,
             headers={
-                "User-Agent": "Mozilla/5.0 FireApp/1.0",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
                 "Accept": "application/json",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Origin": "https://www.nasdaq.com",
+                "Referer": "https://www.nasdaq.com/",
             },
         )
         with urlopen(request, timeout=8) as response:
@@ -386,17 +400,19 @@ def _fetch_nasdaq_stock_quote(symbol: str) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail="Failed to fetch Nasdaq quote") from error
 
     data = payload.get("data") or {}
+    if not data:
+        raise HTTPException(status_code=404, detail=f"No Nasdaq {asset_class} quote for {symbol}")
     primary = data.get("primaryData") or {}
     raw_price = str(primary.get("lastSalePrice") or "").strip()
     match = re.search(r"([0-9][0-9,]*(?:\.[0-9]+)?)", raw_price)
     if not match:
-        raise HTTPException(status_code=404, detail=f"No Nasdaq market price for {symbol}")
+        raise HTTPException(status_code=404, detail=f"No Nasdaq {asset_class} market price for {symbol}")
 
     return {
         "symbol": data.get("symbol") or symbol,
         "price": float(match.group(1).replace(",", "")),
         "currency": "USD",
-        "source": "Nasdaq",
+        "source": f"Nasdaq {asset_class.upper()}",
     }
 
 
