@@ -637,7 +637,7 @@ def ledger_month_label(date_text: str | None) -> str:
 
 def normalize_currency(currency: str | None, fallback: str = "CNY") -> str:
     value = (currency or "").strip().upper()
-    if value in {"CNY", "CAD", "USD"}:
+    if value in {"CNY", "CAD", "USD", "EUR"}:
         return value
     return fallback
 

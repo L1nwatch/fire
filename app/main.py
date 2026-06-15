@@ -107,13 +107,19 @@ def get_market_quote(symbol: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Symbol is required")
 
     is_canadian_symbol = normalized.endswith((".CA", ".TO", ".TSX"))
-    provider_order = [_fetch_yahoo_quote, _fetch_nasdaq_stock_quote, _fetch_stooq_quote]
+    provider_order = [_fetch_yahoo_quote, _fetch_yahoo_chart_quote, _fetch_nasdaq_stock_quote, _fetch_stooq_quote]
     if _is_occ_option_symbol(normalized):
         # For full option contract symbols, try Nasdaq option-chain delayed quote first.
-        provider_order = [_fetch_nasdaq_option_quote, _fetch_yahoo_quote, _fetch_nasdaq_stock_quote, _fetch_stooq_quote]
+        provider_order = [
+            _fetch_nasdaq_option_quote,
+            _fetch_yahoo_quote,
+            _fetch_yahoo_chart_quote,
+            _fetch_nasdaq_stock_quote,
+            _fetch_stooq_quote,
+        ]
     if is_canadian_symbol:
         # For Canadian symbols, prefer TMX over Stooq to avoid US cross-listing mismatches.
-        provider_order = [_fetch_yahoo_quote, _fetch_tmx_quote, _fetch_stooq_quote]
+        provider_order = [_fetch_yahoo_quote, _fetch_yahoo_chart_quote, _fetch_tmx_quote, _fetch_stooq_quote]
 
     errors: list[str] = []
     for fetcher in provider_order:
@@ -360,6 +366,50 @@ def _fetch_yahoo_quote(symbol: str) -> dict[str, Any]:
         "price": float(price),
         "currency": quote.get("currency", "USD"),
         "source": "Yahoo Finance",
+    }
+
+
+def _fetch_yahoo_chart_quote(symbol: str) -> dict[str, Any]:
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{quote_plus(symbol)}?range=5d&interval=1d"
+    try:
+        request = Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 FireApp/1.0",
+                "Accept": "application/json",
+            },
+        )
+        with urlopen(request, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as error:
+        raise HTTPException(status_code=502, detail=f"Yahoo chart quote provider error: {error.code}") from error
+    except URLError as error:
+        raise HTTPException(status_code=502, detail=f"Yahoo chart quote provider unavailable: {error.reason}") from error
+    except Exception as error:  # pragma: no cover - defensive
+        raise HTTPException(status_code=502, detail="Failed to fetch Yahoo chart quote") from error
+
+    results = payload.get("chart", {}).get("result", [])
+    if not results:
+        raise HTTPException(status_code=404, detail=f"No Yahoo chart quote found for {symbol}")
+
+    result = results[0]
+    meta = result.get("meta", {}) or {}
+    price = _parse_numeric(meta.get("regularMarketPrice"))
+    if price is None:
+        closes = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
+        for close_value in reversed(closes):
+            price = _parse_numeric(close_value)
+            if price is not None:
+                break
+
+    if price is None:
+        raise HTTPException(status_code=404, detail=f"No Yahoo chart market price for {symbol}")
+
+    return {
+        "symbol": meta.get("symbol") or symbol,
+        "price": float(price),
+        "currency": meta.get("currency") or "USD",
+        "source": "Yahoo Finance Chart",
     }
 
 

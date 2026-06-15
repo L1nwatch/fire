@@ -1,6 +1,6 @@
 import { computed, ref, watch } from 'vue'
 
-export type CurrencyCode = 'CNY' | 'CAD' | 'USD'
+export type CurrencyCode = 'CNY' | 'CAD' | 'USD' | 'EUR'
 
 const storageKey = 'fire.displayCurrency'
 
@@ -8,16 +8,20 @@ const cnyPerUnit: Record<CurrencyCode, number> = {
   CNY: 1,
   CAD: 5.25,
   USD: 7.2,
+  EUR: 7.8,
 }
 
 const savedCurrency = localStorage.getItem(storageKey)
-export const displayCurrency = ref<CurrencyCode>(savedCurrency === 'CAD' || savedCurrency === 'USD' || savedCurrency === 'CNY' ? savedCurrency : 'CNY')
+export const displayCurrency = ref<CurrencyCode>(
+  savedCurrency === 'CAD' || savedCurrency === 'USD' || savedCurrency === 'CNY' || savedCurrency === 'EUR' ? savedCurrency : 'CNY',
+)
 
-export const currencyOptions: CurrencyCode[] = ['CNY', 'CAD', 'USD']
+export const currencyOptions: CurrencyCode[] = ['CNY', 'CAD', 'USD', 'EUR']
 
 export const currencyHint = computed(() => {
   if (displayCurrency.value === 'CAD') return 'Display converted to CAD'
   if (displayCurrency.value === 'USD') return 'Display converted to USD'
+  if (displayCurrency.value === 'EUR') return 'Display converted to EUR'
   return 'Display converted to CNY'
 })
 
@@ -42,6 +46,6 @@ export function convertMoney(value: number, sourceCurrency: CurrencyCode, target
 }
 
 export function normalizeCurrency(currency: string): CurrencyCode {
-  if (currency === 'CAD' || currency === 'USD' || currency === 'CNY') return currency
+  if (currency === 'CAD' || currency === 'USD' || currency === 'CNY' || currency === 'EUR') return currency
   return displayCurrency.value
 }
