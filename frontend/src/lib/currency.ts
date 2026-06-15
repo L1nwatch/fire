@@ -17,6 +17,7 @@ export const currencyOptions: CurrencyCode[] = ['CNY', 'CAD', 'USD']
 
 export const currencyHint = computed(() => {
   if (displayCurrency.value === 'CAD') return 'Display converted to CAD'
+  if (displayCurrency.value === 'USD') return 'Display converted to USD'
   return 'Display converted to CNY'
 })
 

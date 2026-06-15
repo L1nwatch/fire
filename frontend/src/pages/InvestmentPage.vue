@@ -524,6 +524,14 @@ function rowProfitInDisplay(item: InvestmentItem) {
   return round2(convertMoney(rowProfit(item), sourceCurrency, displayCurrency.value))
 }
 
+function rowCurrency(item: InvestmentItem) {
+  return normalizeCurrency(item.currency || portfolio.value.currency || displayCurrency.value)
+}
+
+function shouldShowConvertedAmount(item: InvestmentItem) {
+  return rowCurrency(item) !== displayCurrency.value
+}
+
 function rowProfitPercent(item: InvestmentItem) {
   const cost = investmentItemCost(item)
   if (Math.abs(cost) <= 1e-9) return 0
@@ -768,14 +776,17 @@ function formatAllocation(value: number) {
             <span>{{ row.category || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="Currency" width="110">
+        <el-table-column label="Quote CCY" width="110">
           <template #default="{ row }">
-            <span>{{ row.currency || portfolio.currency }}</span>
+            <span>{{ rowCurrency(row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="Amount" min-width="150" align="right">
+        <el-table-column :label="`Value (${displayCurrency})`" min-width="170" align="right">
           <template #default="{ row }">
-            <span>{{ formatMoney(investmentItemAmount(row), row.currency || portfolio.currency) }}</span>
+            <div class="amount-cell">
+              <strong>{{ formatMoney(investmentItemAmount(row), rowCurrency(row)) }}</strong>
+              <small v-if="shouldShowConvertedAmount(row)">from {{ rowCurrency(row) }}</small>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="P/L Trend" min-width="170" align="right">
