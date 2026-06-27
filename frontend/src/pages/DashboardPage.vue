@@ -6,6 +6,7 @@ import { emptyMonth, sampleFinanceState, summarizeReportMonth, type FinancialMon
 import {
   emptyInvestmentState,
   investmentItemAmount,
+  investmentItemLookupSymbol,
   normalizeInvestmentCategory,
   snapshotTotal,
   snapshotTotalByCategory,
@@ -137,7 +138,7 @@ function assetCurrency(asset: InvestmentItem) {
 function isDefensiveBarbellItem(item: InvestmentItem) {
   const normalizedType = String(item.type || '').trim().toLowerCase()
   const normalizedName = String(item.name || '').trim().toLowerCase()
-  const normalizedSymbol = String(item.symbol || '').trim().toLowerCase()
+  const normalizedSymbol = investmentItemLookupSymbol(item).toLowerCase()
   if (normalizedType === 'cash') return true
   if (normalizedName.includes('cbil')) return true
   if (normalizedSymbol === 'cbil' || normalizedSymbol.startsWith('cbil.')) return true

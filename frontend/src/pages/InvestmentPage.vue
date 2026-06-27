@@ -10,6 +10,8 @@ import {
   investmentItemCost,
   investmentItemProfit,
   investmentItemAmount,
+  investmentItemLookupSymbol,
+  investmentItemMergeSymbol,
   investmentCategoryOptions,
   investmentTypeOptions,
   isShareBasedType,
@@ -97,20 +99,45 @@ const fearGreedSignal = computed(() => {
   return 'Extreme Greed'
 })
 const barbellBreakdown = computed(() => {
-  const entries = portfolio.value.items
-    .map((item) => {
+  const mergedEntries = new Map<string, {
+    id: string
+    label: string
+    value: number
+    cost: number
+    defensive: boolean
+    count: number
+  }>()
+
+  portfolio.value.items
+    .forEach((item) => {
       const sourceCurrency = normalizeCurrency(item.currency || portfolio.value.currency || displayCurrency.value)
       const value = convertMoney(investmentItemAmount(item), sourceCurrency, displayCurrency.value)
       const cost = convertMoney(investmentItemCost(item), sourceCurrency, displayCurrency.value)
-      return {
+      if (Math.abs(value) <= 1e-9) return
+      const mergeSymbol = investmentItemMergeSymbol(item)
+      const key = mergeSymbol || item.id
+      const existing = mergedEntries.get(key)
+      if (existing) {
+        existing.value += value
+        existing.cost += cost
+        existing.count += 1
+        existing.defensive = existing.defensive && isDefensiveBarbellItem(item)
+        return
+      }
+      mergedEntries.set(key, {
         id: item.id,
-        label: item.name || item.symbol || 'Untitled',
+        label: mergeSymbol || item.name || item.symbol || 'Untitled',
         value,
         cost,
         defensive: isDefensiveBarbellItem(item),
-      }
+        count: 1,
+      })
     })
-    .filter((entry) => Math.abs(entry.value) > 1e-9)
+  const entries = [...mergedEntries.values()]
+    .map((entry) => ({
+      ...entry,
+      label: entry.count > 1 ? `${entry.label} (${entry.count})` : entry.label,
+    }))
 
   const total = entries.reduce((sum, entry) => sum + entry.value, 0)
   const defensiveEntries = entries.filter((entry) => entry.defensive).sort((a, b) => b.value - a.value)
@@ -223,7 +250,7 @@ function removeItem(id: string) {
 async function refreshQuote(item: InvestmentItem, options: { silent?: boolean } = {}) {
   if (!isShareBasedType(item.type)) return
   const enteredSymbol = (item.symbol || '').trim().toUpperCase()
-  const lookupSymbol = (enteredSymbol || item.name || '').trim().toUpperCase()
+  const lookupSymbol = investmentItemLookupSymbol(item)
   if (!lookupSymbol) {
     if (!options.silent) {
       saveError.value = 'Please enter a stock/ETF symbol first.'
@@ -550,7 +577,7 @@ function hasProfitTrend(item: InvestmentItem) {
 function isDefensiveBarbellItem(item: InvestmentItem) {
   const normalizedType = String(item.type || '').trim().toLowerCase()
   const normalizedName = String(item.name || '').trim().toLowerCase()
-  const normalizedSymbol = String(item.symbol || '').trim().toLowerCase()
+  const normalizedSymbol = investmentItemLookupSymbol(item).toLowerCase()
   const defensiveSymbols = new Set(['cbil', 'sgov'])
   if (normalizedType === 'cash') return true
   if (normalizedName.includes('cbil') || normalizedName.includes('sgov')) return true

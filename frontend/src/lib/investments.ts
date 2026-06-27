@@ -45,6 +45,11 @@ export interface InvestmentState {
 
 export type InvestmentCategoryFilter = 'available' | 'locked' | 'liability' | 'all'
 
+const CANADIAN_LISTING_SUFFIXES = new Set(['CA', 'TO', 'TSX'])
+const UNDERLYING_SYMBOL_ALIASES: Record<string, string> = {
+  GOOG: 'GOOGL',
+}
+
 export const emptyInvestmentState = (): InvestmentState => ({
   snapshots: [],
 })
@@ -143,6 +148,28 @@ export function investmentItemCost(item: InvestmentItem) {
 
 export function investmentItemProfit(item: InvestmentItem) {
   return investmentItemAmount(item) - investmentItemCost(item)
+}
+
+export function normalizeInvestmentLookupSymbol(value?: string) {
+  const normalized = String(value || '').trim().toUpperCase().replace(/\s+/g, '')
+  if (!normalized) return ''
+  const parts = normalized.split('-').filter(Boolean)
+  if (parts.length >= 3) {
+    return parts[parts.length - 1] ?? ''
+  }
+  return normalized
+}
+
+export function investmentItemLookupSymbol(item: InvestmentItem) {
+  return normalizeInvestmentLookupSymbol(item.symbol || item.name)
+}
+
+export function investmentItemMergeSymbol(item: InvestmentItem) {
+  const lookupSymbol = investmentItemLookupSymbol(item)
+  if (!lookupSymbol) return ''
+  const [base, suffix] = lookupSymbol.split('.')
+  const symbolBase = suffix && base && CANADIAN_LISTING_SUFFIXES.has(suffix) ? base : lookupSymbol
+  return UNDERLYING_SYMBOL_ALIASES[symbolBase] || symbolBase
 }
 
 export function createSnapshotFromPrevious(previous?: InvestmentSnapshot): InvestmentSnapshot {
