@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import type { ECharts, EChartsOption } from 'echarts'
 import { fetchFinanceState } from '../lib/api'
+import { chartThemeColors } from '../lib/chartTheme'
 import { convertMoney, displayCurrency, formatMoney, normalizeCurrency } from '../lib/currency'
 import {
   emptyMonth,
@@ -11,7 +12,9 @@ import {
   summarizeReportMonth,
   type FinancialMonth,
 } from '../lib/finance'
+import { useTheme } from '../lib/theme'
 
+const { isDark } = useTheme()
 const finance = ref(sampleFinanceState)
 const saveError = ref('')
 const chartEl = ref<HTMLDivElement | null>(null)
@@ -83,7 +86,7 @@ watch(months, (nextMonths) => {
   }
 })
 
-watch(chartPoints, () => {
+watch([chartPoints, isDark], () => {
   syncActiveChartPoint()
   renderChart()
 })
@@ -148,21 +151,25 @@ function renderChart() {
   const maxMoneyValue = Math.max(0, ...points.map((point) => Math.max(point.income, point.spending)))
   const moneyAxisMax = maxMoneyValue > 0 ? maxMoneyValue * 1.2 : 1
   const moneyAxisCurrency = displayCurrency.value
+  const colors = chartThemeColors()
   const option: EChartsOption = {
     animationDuration: 450,
-    color: ['#1f7a63', '#d97432', '#2f6f9f'],
+    color: [colors.accent, colors.orange, colors.blue],
     grid: { left: 74, right: 62, top: 28, bottom: 50, containLabel: false },
     legend: {
       top: 0,
       right: 8,
-      textStyle: { color: '#68716d', fontWeight: 700 },
+      textStyle: { color: colors.text, fontWeight: 700 },
       data: ['Income', 'Spending', 'Savings Rate'],
     },
     tooltip: {
       trigger: 'axis',
+      backgroundColor: colors.surface,
+      borderColor: colors.line,
+      textStyle: { color: colors.ink },
       axisPointer: {
         type: 'line',
-        lineStyle: { color: '#7d8ca0', width: 1, type: 'dashed' },
+        lineStyle: { color: colors.text, width: 1, type: 'dashed' },
       },
       formatter: (params) => {
         const items = Array.isArray(params) ? params : [params]
@@ -183,8 +190,8 @@ function renderChart() {
       boundaryGap: false,
       data: points.map((point) => point.label),
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: '#cfd8d3' } },
-      axisLabel: { color: '#68716d', hideOverlap: true },
+      axisLine: { lineStyle: { color: colors.line } },
+      axisLabel: { color: colors.text, hideOverlap: true },
     },
     yAxis: [
       {
@@ -194,12 +201,12 @@ function renderChart() {
         max: moneyAxisMax,
         splitNumber: 5,
         axisLabel: {
-          color: '#68716d',
+          color: colors.text,
           formatter: (value: number) => formatMoney(value, moneyAxisCurrency),
         },
         axisLine: { show: false },
         axisTick: { show: false },
-        splitLine: { lineStyle: { color: '#dce4df' } },
+        splitLine: { lineStyle: { color: colors.line } },
       },
       {
         type: 'value',
@@ -208,7 +215,7 @@ function renderChart() {
         max: savingsRateChartMax,
         splitNumber: 5,
         axisLabel: {
-          color: '#2f6f9f',
+          color: colors.blue,
           formatter: (value: number) => percent(value),
         },
         axisLine: { show: false },
@@ -217,9 +224,9 @@ function renderChart() {
       },
     ],
     series: [
-      monthSeries('Income', points.map((point) => point.income), '#1f7a63'),
-      monthSeries('Spending', points.map((point) => point.spending), '#d97432'),
-      rateSeries('Savings Rate', points.map((point) => point.chartSavingsRate), '#2f6f9f'),
+      monthSeries('Income', points.map((point) => point.income), colors.accent),
+      monthSeries('Spending', points.map((point) => point.spending), colors.orange),
+      rateSeries('Savings Rate', points.map((point) => point.chartSavingsRate), colors.blue),
     ],
   }
   chart.setOption(option, true)

@@ -5,7 +5,9 @@ import { Delete, Plus } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import type { ECharts, EChartsOption } from 'echarts'
 import { fetchInvestmentState, fetchPortfolioState, saveInvestmentStateToDb, savePortfolioStateToDb } from '../lib/api'
+import { chartThemeColors } from '../lib/chartTheme'
 import { currencyOptions, displayCurrency, formatMoney } from '../lib/currency'
+import { useTheme } from '../lib/theme'
 import {
   createInvestmentItem,
   createSnapshotFromPrevious,
@@ -24,6 +26,7 @@ import {
 } from '../lib/investments'
 
 const route = useRoute()
+const { isDark } = useTheme()
 const investments = ref<InvestmentState>(emptyInvestmentState())
 const selectedSnapshotId = ref('')
 const loaded = ref(false)
@@ -117,7 +120,7 @@ onBeforeUnmount(() => {
   chart?.dispose()
 })
 
-watch([chartSeries, displayCurrency], () => {
+watch([chartSeries, displayCurrency, isDark], () => {
   syncActiveChartPoint()
   renderChart()
 })
@@ -226,15 +229,19 @@ function renderChart() {
   if (!chart) return
   syncActiveChartPoint()
   const points = chartSeries.value
+  const colors = chartThemeColors()
   const option: EChartsOption = {
     animationDuration: 450,
-    color: ['#1f7a63'],
+    color: [colors.accent],
     grid: { left: 74, right: 28, top: 24, bottom: 50, containLabel: false },
     tooltip: {
       trigger: 'axis',
+      backgroundColor: colors.surface,
+      borderColor: colors.line,
+      textStyle: { color: colors.ink },
       axisPointer: {
         type: 'line',
-        lineStyle: { color: '#7d8ca0', width: 1, type: 'dashed' },
+        lineStyle: { color: colors.text, width: 1, type: 'dashed' },
         label: {
           show: true,
           formatter: (params) => String(params.value),
@@ -254,9 +261,9 @@ function renderChart() {
       boundaryGap: false,
       data: points.map((point) => point.date),
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: '#cfd8d3' } },
+      axisLine: { lineStyle: { color: colors.line } },
       axisLabel: {
-        color: '#68716d',
+        color: colors.text,
         hideOverlap: true,
         formatter: (value: string) => value.slice(0, 7),
       },
@@ -266,12 +273,12 @@ function renderChart() {
       scale: true,
       splitNumber: 5,
       axisLabel: {
-        color: '#68716d',
+        color: colors.text,
         formatter: (value: number) => formatMoney(value, displayCurrency.value),
       },
       axisLine: { show: false },
       axisTick: { show: false },
-      splitLine: { lineStyle: { color: '#dce4df' } },
+      splitLine: { lineStyle: { color: colors.line } },
     },
     series: [
       {
@@ -283,11 +290,11 @@ function renderChart() {
         symbolSize: 6,
         showSymbol: false,
         emphasis: { focus: 'series', scale: true },
-        lineStyle: { width: 3, color: '#1f7a63' },
+        lineStyle: { width: 3, color: colors.accent },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(31, 122, 99, 0.3)' },
-            { offset: 1, color: 'rgba(31, 122, 99, 0.02)' },
+            { offset: 0, color: `${colors.accent}4d` },
+            { offset: 1, color: `${colors.accent}08` },
           ]),
         },
       },

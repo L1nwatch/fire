@@ -2,8 +2,10 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { currencyHint, currencyOptions, displayCurrency, setDisplayCurrency, type CurrencyCode } from './lib/currency'
+import { useTheme } from './lib/theme'
 
 const route = useRoute()
+const { isDark } = useTheme()
 
 const activePath = computed(() => {
   if (route.path.startsWith('/monthly')) return '/monthly'
@@ -33,6 +35,10 @@ const activePath = computed(() => {
     <main class="content">
       <div class="top-tools">
         <span>{{ currencyHint }}</span>
+        <div class="theme-toggle">
+          <span>Dark Mode</span>
+          <el-switch v-model="isDark" aria-label="Toggle dark mode" />
+        </div>
         <el-button-group>
           <el-button
             v-for="currency in currencyOptions"

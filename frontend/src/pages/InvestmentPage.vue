@@ -4,6 +4,7 @@ import type { ECharts, EChartsOption } from 'echarts'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Delete, Plus, Refresh } from '@element-plus/icons-vue'
 import { fetchLatestQuote, fetchMarketSentiment, fetchPortfolioState, savePortfolioStateToDb, type MarketSentimentSeries, type MarketSentimentState } from '../lib/api'
+import { chartThemeColors } from '../lib/chartTheme'
 import { convertMoney, currencyOptions, displayCurrency, formatMoney, normalizeCurrency } from '../lib/currency'
 import {
   createInvestmentItem,
@@ -20,9 +21,11 @@ import {
   type InvestmentItem,
   type InvestmentSnapshot,
 } from '../lib/investments'
+import { useTheme } from '../lib/theme'
 
 const CURRENT_PORTFOLIO_DATE = 'CURRENT'
 const AUTO_REFRESH_MS = 2 * 60 * 1000
+const { isDark } = useTheme()
 const BARBELL_ITEM_MIN_SHARE = 0.001
 
 const portfolio = ref<InvestmentSnapshot>(createCurrentPortfolio())
@@ -221,6 +224,10 @@ onBeforeUnmount(() => {
   fearGreedChart?.dispose()
 })
 
+watch(isDark, () => {
+  renderSentimentCharts()
+})
+
 async function loadMarketSentiment(options: { refresh?: boolean } = {}) {
   sentimentLoading.value = true
   try {
@@ -341,7 +348,8 @@ function initSentimentCharts() {
 
 function renderSentimentCharts() {
   initSentimentCharts()
-  renderMarketChart(vxnChart, vxnSeries.value, '#6f5bb8', {
+  const colors = chartThemeColors()
+  renderMarketChart(vxnChart, vxnSeries.value, colors.violet, {
     min: undefined,
     max: undefined,
     markLines: [
@@ -349,7 +357,7 @@ function renderSentimentCharts() {
       { yAxis: 30, name: 'High' },
     ],
   })
-  renderMarketChart(fearGreedChart, fearGreedSeries.value, '#d97432', { min: 0, max: 100 })
+  renderMarketChart(fearGreedChart, fearGreedSeries.value, colors.orange, { min: 0, max: 100 })
 }
 
 function renderMarketChart(
@@ -360,11 +368,15 @@ function renderMarketChart(
 ) {
   if (!chart || !series?.points.length) return
   const points = series.points
+  const colors = chartThemeColors()
   const chartOption: EChartsOption = {
     animationDuration: 450,
     grid: { left: 36, right: 16, top: 16, bottom: 26 },
     tooltip: {
       trigger: 'axis',
+      backgroundColor: colors.surface,
+      borderColor: colors.line,
+      textStyle: { color: colors.ink },
       formatter: (params) => {
         const item = Array.isArray(params) ? params[0] : params
         const point = points[item?.dataIndex ?? 0]
@@ -377,9 +389,9 @@ function renderMarketChart(
       boundaryGap: false,
       data: points.map((point) => point.date),
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: '#d8dfec' } },
+      axisLine: { lineStyle: { color: colors.line } },
       axisLabel: {
-        color: '#68716d',
+        color: colors.text,
         hideOverlap: true,
         formatter: (value: string) => value.slice(5),
       },
@@ -390,10 +402,10 @@ function renderMarketChart(
       min: options.min,
       max: options.max,
       splitNumber: 4,
-      axisLabel: { color: '#68716d' },
+      axisLabel: { color: colors.text },
       axisLine: { show: false },
       axisTick: { show: false },
-      splitLine: { lineStyle: { color: '#e2e8e4' } },
+      splitLine: { lineStyle: { color: colors.line } },
     },
     series: [
       {
@@ -413,8 +425,8 @@ function renderMarketChart(
         markLine: options.markLines
           ? {
               symbol: 'none',
-              label: { color: '#68716d', formatter: '{b}' },
-              lineStyle: { type: 'dashed', color: '#8d98a8', width: 1 },
+              label: { color: colors.text, formatter: '{b}' },
+              lineStyle: { type: 'dashed', color: colors.text, width: 1 },
               data: options.markLines,
             }
           : undefined,
