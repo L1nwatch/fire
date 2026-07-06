@@ -1357,6 +1357,69 @@ html.dark .market-sentiment-panel {
   color: var(--ink);
 }
 
+html.dark .sentiment-card,
+html.dark .sentiment-badge,
+html.dark .asset-summary-item {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--surface) 92%, #0b1014 8%);
+  color: var(--ink);
+}
+
+html.dark .sentiment-card.vxn-low,
+html.dark .asset-summary-item:nth-child(1) {
+  border-color: color-mix(in srgb, var(--green) 44%, var(--line) 56%);
+  background: linear-gradient(135deg, rgba(45, 106, 92, 0.42), rgba(23, 30, 36, 0.96));
+}
+
+html.dark .sentiment-card.vxn-high,
+html.dark .asset-summary-item:nth-child(4) {
+  border-color: color-mix(in srgb, var(--red) 42%, var(--line) 58%);
+  background: linear-gradient(135deg, rgba(118, 58, 58, 0.42), rgba(23, 30, 36, 0.96));
+}
+
+html.dark .asset-summary-item:nth-child(2) {
+  border-color: color-mix(in srgb, var(--violet) 42%, var(--line) 58%);
+  background: linear-gradient(135deg, rgba(66, 72, 122, 0.42), rgba(23, 30, 36, 0.96));
+}
+
+html.dark .asset-summary-item:nth-child(3) {
+  border-color: color-mix(in srgb, var(--yellow) 42%, var(--line) 58%);
+  background: linear-gradient(135deg, rgba(118, 91, 35, 0.38), rgba(23, 30, 36, 0.96));
+}
+
+html.dark .asset-summary-item:nth-child(5) {
+  border-color: color-mix(in srgb, var(--violet) 48%, var(--line) 52%);
+  background: linear-gradient(135deg, rgba(92, 70, 136, 0.42), rgba(23, 30, 36, 0.96));
+}
+
+html.dark .sentiment-badge.low {
+  border-color: color-mix(in srgb, var(--green) 48%, var(--line) 52%);
+  background: rgba(39, 91, 78, 0.58);
+  color: var(--green);
+}
+
+html.dark .sentiment-badge.high {
+  border-color: color-mix(in srgb, var(--red) 48%, var(--line) 52%);
+  background: rgba(95, 47, 47, 0.58);
+  color: var(--red);
+}
+
+html.dark .sentiment-badge.neutral {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+}
+
+html.dark .sentiment-chart {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+}
+
+html.dark .sentiment-empty {
+  border-color: var(--line);
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.07) 1px, transparent 1px, transparent 10px);
+}
+
 html.dark .asset-row.empty,
 html.dark .asset-row.more {
   background: rgba(255, 255, 255, 0.04);
