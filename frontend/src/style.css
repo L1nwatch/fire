@@ -1314,8 +1314,10 @@ html.dark .investment-list-table .el-table__row:hover > td.el-table__cell {
 
 html.dark .chart-panel,
 html.dark .chart-card,
+html.dark .trend-panel,
 html.dark .calendar-day,
 html.dark .ledger-day,
+html.dark .snapshot-history,
 html.dark .monthly-dialog.el-dialog,
 html.dark .snapshot-dialog.el-dialog,
 html.dark .ledger-editor-dialog.el-dialog {
@@ -1344,6 +1346,26 @@ html.dark .monthly-dialog .el-dialog__footer,
 html.dark .ledger-editor-dialog .el-dialog__footer {
   border-top-color: var(--line);
   background: #141b21;
+}
+
+html.dark .trend-chart {
+  border-color: var(--line);
+  background:
+    linear-gradient(180deg, rgba(17, 23, 28, 0.92), rgba(19, 27, 33, 0.96)),
+    radial-gradient(circle at 20% 20%, rgba(75, 191, 157, 0.12), transparent 34%);
+}
+
+html.dark .trend-stat {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+html.dark .chart-point {
+  fill: var(--surface);
+}
+
+html.dark .chart-current-dot {
+  stroke: var(--surface);
 }
 
 html.dark .dialog-summary span,
@@ -1379,6 +1401,7 @@ html.dark .mover-row,
 html.dark .asset-row,
 html.dark .report-row,
 html.dark .sheet-summary,
+html.dark .ledger-top-item,
 html.dark .asset-group,
 html.dark .asset-group.available,
 html.dark .asset-group.locked,
@@ -1460,6 +1483,22 @@ html.dark .asset-row.more {
 html.dark .asset-row.more:hover {
   background: rgba(75, 191, 157, 0.12);
   color: var(--accent-strong);
+}
+
+html.dark .ledger-top-item__rank {
+  background: rgba(75, 191, 157, 0.14);
+  color: var(--accent-strong);
+}
+
+html.dark .ledger-day:hover {
+  border-color: #4a5d67;
+  background: rgba(75, 191, 157, 0.08);
+}
+
+html.dark .ledger-day.active {
+  border-color: var(--accent);
+  background: rgba(75, 191, 157, 0.14);
+  box-shadow: 0 0 0 1px rgba(75, 191, 157, 0.18);
 }
 
 html.dark .el-input__wrapper,
