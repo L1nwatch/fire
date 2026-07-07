@@ -36,6 +36,30 @@ html.dark {
   --violet: #a894ee;
   --orange: #f0a05d;
   --cyan: #58c8d1;
+  --field-bg: #11171c;
+  --field-bg-muted: #151d23;
+  --field-border: #34424b;
+  --el-bg-color: var(--surface);
+  --el-bg-color-overlay: #161e24;
+  --el-fill-color-blank: var(--field-bg);
+  --el-fill-color-light: var(--field-bg-muted);
+  --el-fill-color-lighter: #12191f;
+  --el-border-color: var(--field-border);
+  --el-border-color-light: var(--line);
+  --el-border-color-lighter: #27323a;
+  --el-text-color-primary: var(--ink);
+  --el-text-color-regular: #d8e1df;
+  --el-text-color-secondary: var(--muted);
+  --el-text-color-placeholder: #84908e;
+  --el-disabled-bg-color: #10161b;
+  --el-disabled-border-color: #29343c;
+  --el-disabled-text-color: #798481;
+  --el-input-bg-color: var(--field-bg);
+  --el-input-text-color: var(--ink);
+  --el-input-border-color: var(--field-border);
+  --el-input-hover-border-color: #4a5d67;
+  --el-input-focus-border-color: var(--accent);
+  --el-input-placeholder-color: #84908e;
 }
 
 * {
@@ -1116,7 +1140,7 @@ body {
   color: var(--muted);
 }
 
-.holdings-table :deep(.el-input-number) {
+.holdings-table .el-input-number {
   width: 100%;
 }
 
@@ -1129,7 +1153,7 @@ body {
   padding-right: 11px;
 }
 
-.holdings-table :deep(.el-select) {
+.holdings-table .el-select {
   width: 100%;
 }
 
@@ -1322,6 +1346,13 @@ html.dark .ledger-editor-dialog .el-dialog__footer {
   background: #141b21;
 }
 
+html.dark .dialog-summary span,
+html.dark .snapshot-dialog .month-fields label {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--surface) 82%, #0b1014 18%);
+  color: var(--muted);
+}
+
 html.dark .el-dialog__title,
 html.dark .el-form-item__label {
   color: var(--ink);
@@ -1435,16 +1466,55 @@ html.dark .el-input__wrapper,
 html.dark .el-select__wrapper,
 html.dark .el-textarea__inner,
 html.dark .el-input-number .el-input__wrapper {
-  background: #11171c;
-  box-shadow: 0 0 0 1px var(--line) inset;
+  background: var(--field-bg);
+  background-color: var(--field-bg);
+  box-shadow: 0 0 0 1px var(--field-border) inset;
   color: var(--ink);
 }
 
 html.dark .el-input__inner,
 html.dark .el-textarea__inner,
+html.dark .el-select__input,
+html.dark .el-select__selected-item,
 html.dark .el-select__placeholder,
 html.dark .el-date-editor .el-range-input {
+  background: transparent;
+  background-color: transparent;
   color: var(--ink);
+}
+
+html.dark .el-input.is-disabled .el-input__wrapper,
+html.dark .el-select__wrapper.is-disabled,
+html.dark .el-textarea.is-disabled .el-textarea__inner {
+  background: var(--field-bg-muted);
+  background-color: var(--field-bg-muted);
+  box-shadow: 0 0 0 1px var(--el-disabled-border-color) inset;
+}
+
+html.dark .el-input.is-disabled .el-input__inner,
+html.dark .el-select__wrapper.is-disabled .el-select__selected-item {
+  color: var(--el-disabled-text-color);
+  -webkit-text-fill-color: var(--el-disabled-text-color);
+}
+
+html.dark .el-select__popper.el-popper,
+html.dark .el-picker__popper.el-popper,
+html.dark .el-popper.is-light {
+  background: var(--el-bg-color-overlay);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+html.dark .el-select-dropdown__item {
+  color: var(--el-text-color-regular);
+}
+
+html.dark .el-select-dropdown__item.is-hovering {
+  background: rgba(75, 191, 157, 0.12);
+}
+
+html.dark .el-select-dropdown__item.is-selected {
+  color: var(--accent-strong);
 }
 
 @media (max-width: 900px) {
