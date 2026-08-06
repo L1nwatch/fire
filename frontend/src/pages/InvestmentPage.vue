@@ -12,6 +12,7 @@ import {
   investmentItemProfit,
   investmentItemAmount,
   investmentItemLookupSymbol,
+  investmentItemMergeSymbol,
   investmentCategoryOptions,
   investmentTypeOptions,
   isShareBasedType,
@@ -98,22 +99,55 @@ const fearGreedSignal = computed(() => {
   return 'Extreme Greed'
 })
 const allocationEntries = computed(() => {
-  const entries = portfolio.value.items
-    .map((item) => {
-      const value = Math.max(0, rowValueInDisplay(item))
-      const cost = convertMoney(investmentItemCost(item), rowCurrency(item), displayCurrency.value)
-      const profit = value - cost
+  const mergedEntries = new Map<string, {
+    id: string
+    label: string
+    name: string
+    type: string
+    value: number
+    cost: number
+    count: number
+    hasTrend: boolean
+  }>()
+
+  portfolio.value.items.forEach((item) => {
+    const value = Math.max(0, rowValueInDisplay(item))
+    if (value <= 1e-9) return
+    const cost = convertMoney(investmentItemCost(item), rowCurrency(item), displayCurrency.value)
+    const mergeSymbol = investmentItemMergeSymbol(item)
+    const key = mergeSymbol || item.id
+    const existing = mergedEntries.get(key)
+    if (existing) {
+      existing.value += value
+      existing.cost += cost
+      existing.count += 1
+      existing.hasTrend = existing.hasTrend || hasProfitTrend(item)
+      if (existing.type.toLowerCase() === 'cash' && String(item.type || '').toLowerCase() !== 'cash') {
+        existing.type = item.type || 'Other'
+      }
+      return
+    }
+    mergedEntries.set(key, {
+      id: item.id,
+      label: mergeSymbol || positionSymbol(item),
+      name: item.name || positionSymbol(item),
+      type: item.type || 'Other',
+      value,
+      cost,
+      count: 1,
+      hasTrend: hasProfitTrend(item),
+    })
+  })
+
+  const entries = [...mergedEntries.values()]
+    .map((entry) => {
+      const profit = entry.value - entry.cost
       return {
-        id: item.id,
-        label: positionSymbol(item),
-        name: item.name || positionSymbol(item),
-        type: item.type || 'Other',
-        value,
+        ...entry,
         profit,
-        profitPercent: hasProfitTrend(item) && Math.abs(cost) > 1e-9 ? (profit / cost) * 100 : 0,
+        profitPercent: entry.hasTrend && Math.abs(entry.cost) > 1e-9 ? (profit / entry.cost) * 100 : 0,
       }
     })
-    .filter((entry) => entry.value > 1e-9)
     .sort((a, b) => b.value - a.value)
   const total = entries.reduce((sum, entry) => sum + entry.value, 0)
   return entries.map((entry) => ({ ...entry, share: total ? entry.value / total : 0 }))
@@ -406,6 +440,7 @@ function renderAllocationChart() {
       profit: entry.profit,
       profitPercent: entry.profitPercent,
       type: entry.type,
+      count: entry.count,
       itemStyle: { color: palette[index % palette.length] },
     }
   })
@@ -421,7 +456,7 @@ function renderAllocationChart() {
         if (!datum) return ''
         const returnLabel = datum.type.toLowerCase() === 'cash' ? 'Cash position' : formatPercent(datum.profitPercent)
         return [
-          `<strong>${escapeHtml(datum.name)}</strong>`,
+          `<strong>${escapeHtml(datum.name)}</strong>${datum.count > 1 ? ` · ${datum.count} positions` : ''}`,
           `${formatMoney(datum.value, displayCurrency.value)} · ${formatAllocation(datum.share)}`,
           returnLabel,
         ].join('<br/>')
