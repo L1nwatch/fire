@@ -12,7 +12,6 @@ import {
   investmentItemProfit,
   investmentItemAmount,
   investmentItemLookupSymbol,
-  investmentItemMergeSymbol,
   investmentCategoryOptions,
   investmentTypeOptions,
   isShareBasedType,
@@ -26,7 +25,6 @@ import { useTheme } from '../lib/theme'
 const CURRENT_PORTFOLIO_DATE = 'CURRENT'
 const AUTO_REFRESH_MS = 2 * 60 * 1000
 const { isDark } = useTheme()
-const BARBELL_ITEM_MIN_SHARE = 0.001
 
 const portfolio = ref<InvestmentSnapshot>(createCurrentPortfolio())
 const loaded = ref(false)
@@ -38,6 +36,7 @@ const sentimentError = ref('')
 const marketSentiment = ref<MarketSentimentState | null>(null)
 const vxnChartEl = ref<HTMLDivElement | null>(null)
 const fearGreedChartEl = ref<HTMLDivElement | null>(null)
+const allocationChartEl = ref<HTMLDivElement | null>(null)
 const showEditor = ref(false)
 const editorDraft = ref<InvestmentItem | null>(null)
 const editingItemId = ref('')
@@ -45,6 +44,7 @@ const isCreatingItem = ref(false)
 let autoRefreshTimer: number | null = null
 let vxnChart: ECharts | null = null
 let fearGreedChart: ECharts | null = null
+let allocationChart: ECharts | null = null
 const lastAutoRefreshAt = ref(0)
 
 const totalAvailable = computed(() => snapshotTotalByCategory(portfolio.value, displayCurrency.value, 'available'))
@@ -68,13 +68,9 @@ const totalProfit = computed(() =>
 const totalProfitPercent = computed(() => (Math.abs(totalCost.value) > 1e-9 ? (totalProfit.value / totalCost.value) * 100 : 0))
 const sortedHoldingItems = computed(() =>
   [...portfolio.value.items].sort((a, b) => {
-    const aHasTrend = hasProfitTrend(a)
-    const bHasTrend = hasProfitTrend(b)
-    if (aHasTrend !== bHasTrend) return aHasTrend ? -1 : 1
-    if (!aHasTrend && !bHasTrend) return (a.name || a.symbol || '').localeCompare(b.name || b.symbol || '')
-    return Math.abs(rowProfitPercent(b)) - Math.abs(rowProfitPercent(a))
-      || Math.abs(rowProfitInDisplay(b)) - Math.abs(rowProfitInDisplay(a))
-      || (a.name || a.symbol || '').localeCompare(b.name || b.symbol || '')
+    const aValue = convertMoney(investmentItemAmount(a), rowCurrency(a), displayCurrency.value)
+    const bValue = convertMoney(investmentItemAmount(b), rowCurrency(b), displayCurrency.value)
+    return bValue - aValue || (a.name || a.symbol || '').localeCompare(b.name || b.symbol || '')
   }),
 )
 const vxnSeries = computed(() => marketSentiment.value?.vxn ?? null)
@@ -101,89 +97,26 @@ const fearGreedSignal = computed(() => {
   if (Number(value) < 75) return 'Greed'
   return 'Extreme Greed'
 })
-const barbellBreakdown = computed(() => {
-  const mergedEntries = new Map<string, {
-    id: string
-    label: string
-    value: number
-    cost: number
-    defensive: boolean
-    count: number
-  }>()
-
-  portfolio.value.items
-    .forEach((item) => {
-      const sourceCurrency = normalizeCurrency(item.currency || portfolio.value.currency || displayCurrency.value)
-      const value = convertMoney(investmentItemAmount(item), sourceCurrency, displayCurrency.value)
-      const cost = convertMoney(investmentItemCost(item), sourceCurrency, displayCurrency.value)
-      if (Math.abs(value) <= 1e-9) return
-      const mergeSymbol = investmentItemMergeSymbol(item)
-      const key = mergeSymbol || item.id
-      const existing = mergedEntries.get(key)
-      if (existing) {
-        existing.value += value
-        existing.cost += cost
-        existing.count += 1
-        existing.defensive = existing.defensive && isDefensiveBarbellItem(item)
-        return
-      }
-      mergedEntries.set(key, {
+const allocationEntries = computed(() => {
+  const entries = portfolio.value.items
+    .map((item) => {
+      const value = Math.max(0, rowValueInDisplay(item))
+      const cost = convertMoney(investmentItemCost(item), rowCurrency(item), displayCurrency.value)
+      const profit = value - cost
+      return {
         id: item.id,
-        label: mergeSymbol || item.name || item.symbol || 'Untitled',
+        label: positionSymbol(item),
+        name: item.name || positionSymbol(item),
+        type: item.type || 'Other',
         value,
-        cost,
-        defensive: isDefensiveBarbellItem(item),
-        count: 1,
-      })
+        profit,
+        profitPercent: hasProfitTrend(item) && Math.abs(cost) > 1e-9 ? (profit / cost) * 100 : 0,
+      }
     })
-  const entries = [...mergedEntries.values()]
-    .map((entry) => ({
-      ...entry,
-      label: entry.count > 1 ? `${entry.label} (${entry.count})` : entry.label,
-    }))
-
+    .filter((entry) => entry.value > 1e-9)
+    .sort((a, b) => b.value - a.value)
   const total = entries.reduce((sum, entry) => sum + entry.value, 0)
-  const defensiveEntries = entries.filter((entry) => entry.defensive).sort((a, b) => b.value - a.value)
-  const aggressiveEntries = entries.filter((entry) => !entry.defensive).sort((a, b) => b.value - a.value)
-  const defensiveTotal = defensiveEntries.reduce((sum, entry) => sum + entry.value, 0)
-  const aggressiveTotal = aggressiveEntries.reduce((sum, entry) => sum + entry.value, 0)
-  const defensiveCost = defensiveEntries.reduce((sum, entry) => sum + entry.cost, 0)
-  const aggressiveCost = aggressiveEntries.reduce((sum, entry) => sum + entry.cost, 0)
-  const defensiveProfit = defensiveTotal - defensiveCost
-  const aggressiveProfit = aggressiveTotal - aggressiveCost
-  const withShare = (entry: (typeof entries)[number]) => {
-    const profit = entry.value - entry.cost
-    return {
-      ...entry,
-      profit,
-      profitPercent: Math.abs(entry.cost) > 1e-9 ? (profit / entry.cost) * 100 : 0,
-      share: total ? entry.value / total : 0,
-    }
-  }
-  const visibleItems = (items: typeof entries) =>
-    items
-      .map(withShare)
-      .filter((entry) => Math.abs(entry.share) >= BARBELL_ITEM_MIN_SHARE)
-
-  return {
-    total,
-    defensive: {
-      total: defensiveTotal,
-      cost: defensiveCost,
-      profit: defensiveProfit,
-      profitPercent: Math.abs(defensiveCost) > 1e-9 ? (defensiveProfit / defensiveCost) * 100 : 0,
-      share: total ? defensiveTotal / total : 0,
-      items: visibleItems(defensiveEntries),
-    },
-    aggressive: {
-      total: aggressiveTotal,
-      cost: aggressiveCost,
-      profit: aggressiveProfit,
-      profitPercent: Math.abs(aggressiveCost) > 1e-9 ? (aggressiveProfit / aggressiveCost) * 100 : 0,
-      share: total ? aggressiveTotal / total : 0,
-      items: visibleItems(aggressiveEntries),
-    },
-  }
+  return entries.map((entry) => ({ ...entry, share: total ? entry.value / total : 0 }))
 })
 
 watch(
@@ -200,9 +133,11 @@ watch(
   { deep: true },
 )
 
+watch(allocationEntries, () => renderAllocationChart(), { deep: true, flush: 'post' })
+
 onMounted(async () => {
-  initSentimentCharts()
-  window.addEventListener('resize', resizeSentimentCharts)
+  initCharts()
+  window.addEventListener('resize', resizeCharts)
   void loadMarketSentiment()
   try {
     const state = await fetchPortfolioState()
@@ -219,13 +154,15 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   stopAutoRefresh()
-  window.removeEventListener('resize', resizeSentimentCharts)
+  window.removeEventListener('resize', resizeCharts)
   vxnChart?.dispose()
   fearGreedChart?.dispose()
+  allocationChart?.dispose()
 })
 
 watch(isDark, () => {
   renderSentimentCharts()
+  renderAllocationChart()
 })
 
 async function loadMarketSentiment(options: { refresh?: boolean } = {}) {
@@ -337,17 +274,20 @@ function handleVisibilityChange() {
   void loadMarketSentiment()
 }
 
-function initSentimentCharts() {
+function initCharts() {
   if (vxnChartEl.value && !vxnChart) {
     vxnChart = echarts.init(vxnChartEl.value)
   }
   if (fearGreedChartEl.value && !fearGreedChart) {
     fearGreedChart = echarts.init(fearGreedChartEl.value)
   }
+  if (allocationChartEl.value && !allocationChart) {
+    allocationChart = echarts.init(allocationChartEl.value)
+  }
 }
 
 function renderSentimentCharts() {
-  initSentimentCharts()
+  initCharts()
   const colors = chartThemeColors()
   renderMarketChart(vxnChart, vxnSeries.value, colors.violet, {
     min: undefined,
@@ -436,9 +376,99 @@ function renderMarketChart(
   chart.setOption(chartOption, true)
 }
 
-function resizeSentimentCharts() {
+function renderAllocationChart() {
+  initCharts()
+  if (!allocationChart) return
+  if (!allocationEntries.value.length) {
+    allocationChart.clear()
+    return
+  }
+  const colors = chartThemeColors()
+  const positivePalette = isDark.value
+    ? ['#176747', '#1a7653', '#1d815b', '#226c50', '#1b5f47']
+    : ['#21835d', '#287957', '#1f704f', '#338765', '#247657']
+  const negativePalette = isDark.value
+    ? ['#823f45', '#93464d', '#743a40']
+    : ['#b94b4b', '#a94747', '#c05a5a']
+  const neutralPalette = isDark.value
+    ? ['#31566c', '#3d5c70', '#345267']
+    : ['#3f7898', '#4d829d', '#47748e']
+  const data = allocationEntries.value.map((entry, index) => {
+    const palette = entry.type.toLowerCase() === 'cash'
+      ? neutralPalette
+      : entry.profitPercent < 0
+        ? negativePalette
+        : positivePalette
+    return {
+      name: entry.label,
+      value: entry.value,
+      share: entry.share,
+      profit: entry.profit,
+      profitPercent: entry.profitPercent,
+      type: entry.type,
+      itemStyle: { color: palette[index % palette.length] },
+    }
+  })
+  const chartOption: EChartsOption = {
+    animationDuration: 420,
+    tooltip: {
+      confine: true,
+      backgroundColor: colors.surface,
+      borderColor: colors.line,
+      textStyle: { color: colors.ink },
+      formatter: (params) => {
+        const datum = (params as { data?: (typeof data)[number] }).data
+        if (!datum) return ''
+        const returnLabel = datum.type.toLowerCase() === 'cash' ? 'Cash position' : formatPercent(datum.profitPercent)
+        return [
+          `<strong>${escapeHtml(datum.name)}</strong>`,
+          `${formatMoney(datum.value, displayCurrency.value)} · ${formatAllocation(datum.share)}`,
+          returnLabel,
+        ].join('<br/>')
+      },
+    },
+    series: [
+      {
+        type: 'treemap',
+        data,
+        roam: false,
+        nodeClick: false,
+        breadcrumb: { show: false },
+        squareRatio: 1.15,
+        visibleMin: 160,
+        label: {
+          show: true,
+          color: '#ffffff',
+          fontWeight: 800,
+          fontSize: 12,
+          lineHeight: 18,
+          overflow: 'truncate',
+          formatter: (params) => {
+            const datum = (params as { data?: (typeof data)[number] }).data
+            if (!datum) return ''
+            const returnLabel = datum.type.toLowerCase() === 'cash' ? 'Cash' : formatPercent(datum.profitPercent)
+            return `${datum.name}\n${formatAllocation(datum.share)}\n${returnLabel}`
+          },
+        },
+        itemStyle: {
+          borderColor: colors.surface,
+          borderWidth: 3,
+          gapWidth: 3,
+        },
+        emphasis: {
+          label: { show: true },
+          itemStyle: { borderColor: colors.ink, borderWidth: 2 },
+        },
+      },
+    ],
+  }
+  allocationChart.setOption(chartOption, true)
+}
+
+function resizeCharts() {
   vxnChart?.resize()
   fearGreedChart?.resize()
+  allocationChart?.resize()
 }
 
 function openEditor(item: InvestmentItem) {
@@ -567,8 +597,28 @@ function rowCurrency(item: InvestmentItem) {
   return normalizeCurrency(item.currency || portfolio.value.currency || displayCurrency.value)
 }
 
-function shouldShowConvertedAmount(item: InvestmentItem) {
-  return rowCurrency(item) !== displayCurrency.value
+function rowValueInDisplay(item: InvestmentItem) {
+  return round2(convertMoney(investmentItemAmount(item), rowCurrency(item), displayCurrency.value))
+}
+
+function rowAllocation(item: InvestmentItem) {
+  if (Math.abs(totalAll.value) <= 1e-9) return 0
+  return rowValueInDisplay(item) / totalAll.value
+}
+
+function positionSymbol(item: InvestmentItem) {
+  return investmentItemLookupSymbol(item) || item.name || '—'
+}
+
+function positionName(item: InvestmentItem) {
+  const symbol = positionSymbol(item)
+  if (item.name && item.name.trim().toUpperCase() !== symbol.toUpperCase()) return item.name
+  return [item.type, item.account].filter(Boolean).join(' · ') || 'Investment position'
+}
+
+function positionMonogram(item: InvestmentItem) {
+  const value = positionSymbol(item).replace(/[^A-Z0-9]/gi, '')
+  return (value.slice(0, 2) || '•').toUpperCase()
 }
 
 function rowProfitPercent(item: InvestmentItem) {
@@ -584,18 +634,6 @@ function rowProfitClass(item: InvestmentItem) {
 
 function hasProfitTrend(item: InvestmentItem) {
   return String(item.type || '').trim().toLowerCase() !== 'cash'
-}
-
-function isDefensiveBarbellItem(item: InvestmentItem) {
-  const normalizedType = String(item.type || '').trim().toLowerCase()
-  const normalizedName = String(item.name || '').trim().toLowerCase()
-  const normalizedSymbol = investmentItemLookupSymbol(item).toLowerCase()
-  const defensiveSymbols = new Set(['cbil', 'sgov'])
-  if (normalizedType === 'cash') return true
-  if (normalizedName.includes('cbil') || normalizedName.includes('sgov')) return true
-  if (normalizedName.includes('treasury bill') || normalizedName.includes('t-bill')) return true
-  if (defensiveSymbols.has(normalizedSymbol) || [...defensiveSymbols].some((symbol) => normalizedSymbol.startsWith(`${symbol}.`))) return true
-  return false
 }
 
 function hasMeaningfulItem(item: InvestmentItem) {
@@ -622,6 +660,16 @@ function formatPercent(value: number) {
 function formatAllocation(value: number) {
   const normalized = Number.isFinite(value) ? Math.max(0, value) : 0
   return `${(normalized * 100).toFixed(1)}%`
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>'"]/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;',
+  })[character] || character)
 }
 </script>
 
@@ -717,145 +765,68 @@ function formatAllocation(value: number) {
       </div>
     </div>
 
-    <section class="panel barbell-panel" style="margin-top: 14px">
+    <section class="panel allocation-panel" style="margin-top: 14px">
       <div class="section-head">
         <div>
-          <h2>Barbell Allocation</h2>
-          <span class="section-subtitle">Defensive side (Cash + T-bill ETFs) vs growth side (equities/options and others).</span>
+          <h2>Allocation</h2>
+          <span class="section-subtitle">Tile size shows portfolio weight. Color shows total return; cash is blue.</span>
+        </div>
+        <div class="allocation-total">
+          <span>Total</span>
+          <strong>{{ formatMoney(totalAll, displayCurrency) }}</strong>
         </div>
       </div>
-      <div class="asset-groups barbell-groups">
-        <div class="asset-group available barbell-defensive">
-          <div class="asset-group-head">
-            <div>
-              <span>Defensive</span>
-              <small>{{ formatAllocation(barbellBreakdown.defensive.share) }} of portfolio</small>
-            </div>
-            <strong>{{ formatMoney(barbellBreakdown.defensive.total, displayCurrency) }}</strong>
-          </div>
-          <div class="asset-list barbell-list">
-            <div v-for="item in barbellBreakdown.defensive.items" :key="item.id" class="asset-row barbell-item-row">
-              <span>{{ item.label }}</span>
-              <div class="barbell-row-values">
-                <strong>{{ formatMoney(item.value, displayCurrency) }}</strong>
-                <small>{{ formatAllocation(item.share) }}</small>
-              </div>
-            </div>
-            <div v-if="!barbellBreakdown.defensive.items.length" class="asset-row barbell-item-row empty">No defensive holdings yet.</div>
-          </div>
-        </div>
-        <div class="asset-group barbell-aggressive">
-          <div class="asset-group-head">
-            <div>
-              <span>Growth / Options</span>
-              <small class="barbell-head-details">
-                <span>{{ formatAllocation(barbellBreakdown.aggressive.share) }} of portfolio</span>
-                <span>Cost {{ formatMoney(barbellBreakdown.aggressive.cost, displayCurrency) }}</span>
-                <span :class="{ positive: barbellBreakdown.aggressive.profitPercent >= 0, negative: barbellBreakdown.aggressive.profitPercent < 0 }">
-                  P/L {{ formatPercent(barbellBreakdown.aggressive.profitPercent) }}
-                </span>
-              </small>
-            </div>
-            <strong>{{ formatMoney(barbellBreakdown.aggressive.total, displayCurrency) }}</strong>
-          </div>
-          <div class="asset-list barbell-list">
-            <div v-for="item in barbellBreakdown.aggressive.items" :key="item.id" class="asset-row barbell-item-row">
-              <span>{{ item.label }}</span>
-              <div class="barbell-row-values">
-                <strong>{{ formatMoney(item.value, displayCurrency) }}</strong>
-                <small class="barbell-item-details">
-                  <span>{{ formatAllocation(item.share) }}</span>
-                  <span>Cost {{ formatMoney(item.cost, displayCurrency) }}</span>
-                  <span :class="{ positive: item.profitPercent >= 0, negative: item.profitPercent < 0 }">
-                    P/L {{ formatPercent(item.profitPercent) }}
-                  </span>
-                </small>
-              </div>
-            </div>
-            <div v-if="!barbellBreakdown.aggressive.items.length" class="asset-row barbell-item-row empty">No growth/options holdings yet.</div>
-          </div>
+      <div class="allocation-chart-wrap">
+        <div ref="allocationChartEl" class="allocation-treemap" role="img" aria-label="Portfolio allocation treemap"></div>
+        <div v-if="!allocationEntries.length" class="allocation-empty">
+          <strong>No allocation yet</strong>
+          <span>Add positions with a market value to build the treemap.</span>
         </div>
       </div>
     </section>
 
-    <section class="panel" style="margin-top: 14px">
-      <div class="section-head" style="margin-bottom: 10px">
+    <section class="panel positions-panel" style="margin-top: 14px">
+      <div class="section-head positions-head">
         <div>
-          <h2>Holdings</h2>
-          <span class="section-subtitle">Click any row to edit. Changes are saved when you close the editor.</span>
+          <h2>{{ sortedHoldingItems.length }} Positions</h2>
+          <span class="section-subtitle">
+            Total return
+            <b :class="{ positive: totalProfitPercent >= 0, negative: totalProfitPercent < 0 }">{{ formatPercent(totalProfitPercent) }}</b>
+            · Select a position to edit
+          </span>
         </div>
         <el-button type="primary" plain :icon="Plus" @click="addItem">Add Holding</el-button>
       </div>
 
-      <el-table
-        :data="sortedHoldingItems"
-        size="large"
-        class="data-table holdings-table investment-list-table"
-        table-layout="fixed"
-        empty-text="No holdings yet"
-        @row-click="openEditor"
-      >
-        <el-table-column label="Asset" min-width="190">
-          <template #default="{ row }">
-            <strong>{{ row.name || '-' }}</strong>
-          </template>
-        </el-table-column>
-        <el-table-column label="Symbol" min-width="130">
-          <template #default="{ row }">
-            <span>{{ row.symbol || '-' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="Type" min-width="120">
-          <template #default="{ row }">
-            <span>{{ row.type || '-' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="Category" min-width="120">
-          <template #default="{ row }">
-            <span>{{ row.category || '-' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="Quote CCY" width="110">
-          <template #default="{ row }">
-            <span>{{ rowCurrency(row) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column :label="`Value (${displayCurrency})`" min-width="170" align="right">
-          <template #default="{ row }">
-            <div class="amount-cell">
-              <strong>{{ formatMoney(investmentItemAmount(row), rowCurrency(row)) }}</strong>
-              <small v-if="shouldShowConvertedAmount(row)">from {{ rowCurrency(row) }}</small>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="P/L Trend" min-width="170" align="right">
-          <template #default="{ row }">
-            <div v-if="hasProfitTrend(row)" class="pl-cell" :class="rowProfitClass(row)">
-              <strong>{{ formatMoney(rowProfitInDisplay(row), displayCurrency) }}</strong>
-              <small>{{ formatPercent(rowProfitPercent(row)) }}</small>
-            </div>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="Shares" min-width="120" align="right">
-          <template #default="{ row }">
-            <span v-if="isShareBasedType(row.type)">{{ formatNumber(row.shares) }}</span>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="Market / Unit" min-width="140" align="right">
-          <template #default="{ row }">
-            <span v-if="isShareBasedType(row.type)">{{ formatNumber(row.unitPrice) }}</span>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="Cost / Unit" min-width="130" align="right">
-          <template #default="{ row }">
-            <span v-if="isShareBasedType(row.type)">{{ formatNumber(row.costBasis) }}</span>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div v-if="sortedHoldingItems.length" class="positions-grid">
+        <button
+          v-for="(item, index) in sortedHoldingItems"
+          :key="item.id"
+          type="button"
+          class="position-card"
+          :aria-label="`Edit ${positionSymbol(item)}`"
+          @click="openEditor(item)"
+        >
+          <span class="position-rank">#{{ index + 1 }}</span>
+          <span class="position-mark" :class="`tone-${index % 6}`">{{ positionMonogram(item) }}</span>
+          <span class="position-identity">
+            <strong>{{ positionSymbol(item) }}</strong>
+            <small>{{ positionName(item) }}</small>
+            <small>{{ formatAllocation(rowAllocation(item)) }} · {{ item.category || 'Available' }}</small>
+          </span>
+          <span class="position-values">
+            <strong>{{ formatMoney(rowValueInDisplay(item), displayCurrency) }}</strong>
+            <small v-if="hasProfitTrend(item)" :class="rowProfitClass(item)">
+              {{ formatMoney(rowProfitInDisplay(item), displayCurrency) }} ({{ formatPercent(rowProfitPercent(item)) }})
+            </small>
+            <small v-else class="position-cash-label">Cash position</small>
+          </span>
+        </button>
+      </div>
+      <div v-else class="positions-empty">
+        <strong>No positions yet</strong>
+        <span>Add a holding to build your portfolio view.</span>
+      </div>
     </section>
 
     <el-dialog

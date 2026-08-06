@@ -1165,6 +1165,181 @@ body {
   background: #f2f7ff !important;
 }
 
+.positions-panel {
+  overflow: hidden;
+}
+
+.positions-head {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.positions-head .section-subtitle b {
+  margin-left: 3px;
+}
+
+.positions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 18px;
+}
+
+.position-card {
+  appearance: none;
+  display: grid;
+  grid-template-columns: 32px 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 86px;
+  margin: 0;
+  padding: 12px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.16s ease, transform 0.16s ease;
+}
+
+.position-card:hover,
+.position-card:focus-visible {
+  background: color-mix(in srgb, var(--accent-soft) 52%, transparent);
+}
+
+.position-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.position-rank {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.position-mark {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 7px;
+  background: #e7efff;
+  color: #315785;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  box-shadow: inset 0 0 0 1px rgba(49, 87, 133, 0.14);
+}
+
+.position-mark.tone-1 { background: #e3f4ed; color: #1c7258; }
+.position-mark.tone-2 { background: #f1e9ff; color: #674b9b; }
+.position-mark.tone-3 { background: #fff0da; color: #9a5b1b; }
+.position-mark.tone-4 { background: #e4f3f5; color: #236d76; }
+.position-mark.tone-5 { background: #fbe7ec; color: #9a4156; }
+
+.position-identity,
+.position-values {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.position-identity strong,
+.position-values strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.position-identity small,
+.position-values small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.position-values {
+  justify-items: end;
+  text-align: right;
+}
+
+.position-values small.positive { color: var(--green); }
+.position-values small.negative { color: var(--red); }
+.position-cash-label { color: var(--blue) !important; }
+
+.positions-empty {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 48px 20px;
+  color: var(--muted);
+}
+
+.positions-empty strong {
+  color: var(--ink);
+}
+
+.allocation-panel {
+  overflow: hidden;
+}
+
+.allocation-total {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 88%, var(--accent-soft) 12%);
+}
+
+.allocation-total span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.allocation-total strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.allocation-chart-wrap {
+  position: relative;
+  min-height: 390px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--surface) 94%, var(--bg) 6%);
+}
+
+.allocation-treemap {
+  width: 100%;
+  height: 390px;
+}
+
+.allocation-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 5px;
+  color: var(--muted);
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--line) 28%, transparent), color-mix(in srgb, var(--line) 28%, transparent) 1px, transparent 1px, transparent 12px);
+}
+
+.allocation-empty strong {
+  color: var(--ink);
+}
+
 .quote-action-wrap .el-button {
   justify-self: start;
 }
@@ -1413,7 +1588,9 @@ html.dark .market-sentiment-panel {
 
 html.dark .sentiment-card,
 html.dark .sentiment-badge,
-html.dark .asset-summary-item {
+html.dark .asset-summary-item,
+html.dark .allocation-total,
+html.dark .allocation-chart-wrap {
   border-color: var(--line);
   background: color-mix(in srgb, var(--surface) 92%, #0b1014 8%);
   color: var(--ink);
@@ -1604,11 +1781,29 @@ html.dark .el-select-dropdown__item.is-selected {
   .actions {
     justify-content: flex-start;
   }
+
+  .positions-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
   .content {
     padding: 16px;
+  }
+
+  .positions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .allocation-chart-wrap,
+  .allocation-treemap {
+    min-height: 320px;
+    height: 320px;
+  }
+
+  .position-card {
+    grid-template-columns: 28px 38px minmax(0, 1fr) auto;
   }
 
   .barbell-panel {
