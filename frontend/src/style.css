@@ -1057,6 +1057,76 @@ body {
   background: #fbfcff;
 }
 
+.investment-editor-dialog.el-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  max-height: 90dvh;
+  padding: 0;
+}
+
+.investment-editor-dialog .el-dialog__header,
+.investment-editor-dialog .el-dialog__footer {
+  flex-shrink: 0;
+}
+
+.investment-editor-dialog .el-dialog__body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px;
+  scroll-padding-block: 16px;
+}
+
+.investment-editor-dialog .el-dialog__footer {
+  padding: 16px 20px;
+}
+
+.investment-editor-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.investment-editor-fields label {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.investment-editor-wide {
+  grid-column: 1 / -1;
+}
+
+.investment-editor-fields .el-input-number,
+.investment-editor-fields .el-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.investment-editor-fields .el-input__inner {
+  text-align: left;
+}
+
+.investment-editor-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.investment-editor-actions .el-button {
+  min-width: 100px;
+  margin: 0;
+}
+
+.investment-editor-actions .el-button--primary {
+  margin-left: auto;
+}
+
 .dialog-title {
   display: flex;
   justify-content: space-between;
@@ -1788,6 +1858,80 @@ html.dark .el-select-dropdown__item.is-selected {
 }
 
 @media (max-width: 640px) {
+  .investment-editor-dialog.el-dialog {
+    position: fixed;
+    top: var(--investment-editor-top, 0px);
+    left: 0;
+    width: 100%;
+    max-width: none;
+    height: var(--investment-editor-height, 100dvh);
+    max-height: none;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .investment-editor-dialog .el-dialog__header {
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left));
+  }
+
+  .investment-editor-dialog .el-dialog__headerbtn {
+    top: env(safe-area-inset-top, 0px);
+    right: env(safe-area-inset-right, 0px);
+    width: 48px;
+    height: 48px;
+  }
+
+  .investment-editor-dialog .dialog-title {
+    gap: 10px;
+  }
+
+  .investment-editor-dialog .dialog-summary {
+    display: flex;
+    justify-content: flex-start;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .investment-editor-dialog .dialog-summary span {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+  }
+
+  .investment-editor-dialog .el-dialog__body {
+    flex: 1;
+    padding: 16px max(16px, env(safe-area-inset-right)) 20px max(16px, env(safe-area-inset-left));
+  }
+
+  .investment-editor-fields {
+    gap: 14px 12px;
+  }
+
+  .investment-editor-fields .el-input__wrapper,
+  .investment-editor-fields .el-select__wrapper {
+    min-height: 46px;
+  }
+
+  .investment-editor-fields .el-input__inner,
+  .investment-editor-fields .el-select__input,
+  .investment-editor-fields .el-select__selected-item,
+  .investment-editor-fields .el-textarea__inner {
+    font-size: 16px;
+  }
+
+  .investment-editor-dialog .el-dialog__footer {
+    padding: 12px max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+
+  .investment-editor-actions .el-button {
+    min-height: 46px;
+  }
+
+  .investment-editor-actions .el-button--primary {
+    flex: 1;
+  }
+
   .content {
     padding: 16px;
   }

@@ -39,6 +39,7 @@ const vxnChartEl = ref<HTMLDivElement | null>(null)
 const fearGreedChartEl = ref<HTMLDivElement | null>(null)
 const allocationChartEl = ref<HTMLDivElement | null>(null)
 const showEditor = ref(false)
+const editorViewportStyle = ref<Record<string, string>>({})
 const editorDraft = ref<InvestmentItem | null>(null)
 const editingItemId = ref('')
 const isCreatingItem = ref(false)
@@ -197,6 +198,25 @@ onBeforeUnmount(() => {
 watch(isDark, () => {
   renderSentimentCharts()
   renderAllocationChart()
+})
+
+// Mobile keyboards resize the visual viewport without always changing 100dvh.
+watch(showEditor, (visible, _previous, onCleanup) => {
+  const viewport = window.visualViewport
+  if (!visible || !viewport) return
+  const updateViewport = () => {
+    editorViewportStyle.value = {
+      '--investment-editor-height': `${viewport.height}px`,
+      '--investment-editor-top': `${viewport.offsetTop}px`,
+    }
+  }
+  updateViewport()
+  viewport.addEventListener('resize', updateViewport)
+  viewport.addEventListener('scroll', updateViewport)
+  onCleanup(() => {
+    viewport.removeEventListener('resize', updateViewport)
+    viewport.removeEventListener('scroll', updateViewport)
+  })
 })
 
 async function loadMarketSentiment(options: { refresh?: boolean } = {}) {
@@ -867,16 +887,20 @@ function escapeHtml(value: string) {
     <el-dialog
       v-model="showEditor"
       class="snapshot-dialog investment-editor-dialog"
-      width="980px"
+      :style="editorViewportStyle"
+      width="min(720px, calc(100% - 32px))"
+      top="5vh"
+      append-to-body
+      :close-on-click-modal="false"
       destroy-on-close
       @close="onEditorClose"
       @closed="onEditorClosed"
     >
-      <template #header>
+      <template #header="{ titleId }">
         <div class="dialog-title">
           <div>
             <span>Investment Editor</span>
-            <strong>{{ isCreatingItem ? 'New Holding' : 'Edit Holding' }}</strong>
+            <strong :id="titleId">{{ isCreatingItem ? 'New Holding' : 'Edit Holding' }}</strong>
           </div>
           <div class="dialog-summary" v-if="editorDraft">
             <span>Market {{ formatMoney(investmentItemAmount(editorDraft), editorDraft.currency || portfolio.currency) }}</span>
@@ -886,68 +910,59 @@ function escapeHtml(value: string) {
       </template>
 
       <template v-if="editorDraft">
-        <div class="month-fields">
-          <label>
+        <div class="investment-editor-fields">
+          <label class="investment-editor-wide">
             <span>Asset</span>
-            <el-input v-model="editorDraft.name" placeholder="AAPL, BTC, Cash, SPY..." />
-          </label>
-          <label>
-            <span>Symbol</span>
-            <el-input v-model="editorDraft.symbol" :disabled="!isShareBasedType(editorDraft.type)" placeholder="AAPL / FBTC.CA" @blur="refreshEditorQuote" />
+            <el-input v-model="editorDraft.name" aria-label="Asset" placeholder="AAPL, BTC, Cash, SPY..." />
           </label>
           <label>
             <span>Type</span>
-            <el-select v-model="editorDraft.type" filterable allow-create default-first-option>
+            <el-select v-model="editorDraft.type" aria-label="Type" filterable allow-create default-first-option>
               <el-option v-for="itemType in investmentTypeOptions" :key="itemType" :label="itemType" :value="itemType" />
             </el-select>
           </label>
           <label>
-            <span>Category</span>
-            <el-select v-model="editorDraft.category" filterable allow-create default-first-option>
-              <el-option v-for="category in investmentCategoryOptions" :key="category" :label="category" :value="category" />
-            </el-select>
-          </label>
-          <label>
             <span>Currency</span>
-            <el-select v-model="editorDraft.currency">
+            <el-select v-model="editorDraft.currency" aria-label="Currency">
               <el-option v-for="currency in currencyOptions" :key="currency" :label="currency" :value="currency" />
             </el-select>
           </label>
-          <label class="quote-action-wrap">
-            <span>Quote</span>
-            <el-input :model-value="isShareBasedType(editorDraft.type) ? formatNumber(editorDraft.unitPrice) : '-'" disabled />
-          </label>
           <label>
+            <span>Category</span>
+            <el-select v-model="editorDraft.category" aria-label="Category" filterable allow-create default-first-option>
+              <el-option v-for="category in investmentCategoryOptions" :key="category" :label="category" :value="category" />
+            </el-select>
+          </label>
+          <label v-if="isShareBasedType(editorDraft.type)">
+            <span>Symbol</span>
+            <el-input v-model="editorDraft.symbol" aria-label="Symbol" placeholder="AAPL / FBTC.CA" autocapitalize="characters" :spellcheck="false" @blur="refreshEditorQuote" />
+          </label>
+          <label v-if="isShareBasedType(editorDraft.type)">
             <span>Shares</span>
-            <el-input-number v-if="isShareBasedType(editorDraft.type)" v-model="editorDraft.shares" :precision="2" :controls="false" />
-            <el-input v-else model-value="-" disabled />
+            <el-input-number v-model="editorDraft.shares" aria-label="Shares" inputmode="decimal" :precision="2" :controls="false" />
           </label>
-          <label>
-            <span>Market / Unit</span>
-            <el-input v-if="isShareBasedType(editorDraft.type)" :model-value="formatNumber(editorDraft.unitPrice)" disabled />
-            <el-input v-else model-value="-" disabled />
-          </label>
-          <label>
+          <label v-if="isShareBasedType(editorDraft.type)">
             <span>Cost / Unit</span>
-            <el-input-number v-if="isShareBasedType(editorDraft.type)" v-model="editorDraft.costBasis" :precision="2" :controls="false" />
-            <el-input v-else model-value="-" disabled />
+            <el-input-number v-model="editorDraft.costBasis" aria-label="Cost / Unit" inputmode="decimal" :precision="2" :controls="false" />
           </label>
-          <label>
+          <label v-if="isShareBasedType(editorDraft.type)" class="investment-editor-wide">
+            <span>Market / Unit</span>
+            <el-input :model-value="formatNumber(editorDraft.unitPrice)" aria-label="Market / Unit" readonly />
+          </label>
+          <label v-else>
             <span>Amount</span>
-            <el-input-number v-if="!isShareBasedType(editorDraft.type)" v-model="editorDraft.amount" :precision="2" :controls="false" />
-            <el-input v-else :model-value="formatMoney(investmentItemAmount(editorDraft), editorDraft.currency || portfolio.currency)" disabled />
+            <el-input-number v-model="editorDraft.amount" aria-label="Amount" inputmode="decimal" :precision="2" :controls="false" />
           </label>
-          <label>
+          <label class="investment-editor-wide">
             <span>Notes</span>
-            <el-input v-model="editorDraft.notes" />
+            <el-input v-model="editorDraft.notes" aria-label="Notes" type="textarea" :rows="2" resize="vertical" />
           </label>
         </div>
       </template>
 
       <template #footer>
-        <div class="actions" style="width: 100%; justify-content: space-between">
+        <div class="investment-editor-actions">
           <el-button v-if="!isCreatingItem" :icon="Delete" type="danger" plain @click="deleteFromEditor">Delete</el-button>
-          <span v-else></span>
           <el-button type="primary" @click="closeEditor">Done</el-button>
         </div>
       </template>
