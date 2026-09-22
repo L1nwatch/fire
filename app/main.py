@@ -146,6 +146,12 @@ def _normalize_market_symbol(symbol: str) -> str:
         "CBIL.TSX": "CBIL.TO",
         "CBIL.TO": "CBIL.TO",
         "CBIL ETF": "CBIL.TO",
+        # TSX uses KILO.B; Yahoo uses a hyphen for the unit class and .TO
+        # for the exchange. Keep the non-currency-hedged units distinct.
+        "KILO.B": "KILO-B.TO",
+        "KILO.B.CA": "KILO-B.TO",
+        "KILO.B.TSX": "KILO-B.TO",
+        "KILO.B.TO": "KILO-B.TO",
     }
     if normalized in aliases:
         return aliases[normalized]
@@ -609,6 +615,8 @@ def _normalize_symbol_for_tmx(symbol: str) -> str | None:
 
     if not candidate:
         return None
+    if candidate == "KILO-B":
+        return "KILO.B"
     if not re.fullmatch(r"[A-Z0-9][A-Z0-9\-.]{0,9}", candidate):
         return None
     return candidate
