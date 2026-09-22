@@ -1,11 +1,25 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import { currencyHint, currencyOptions, displayCurrency, setDisplayCurrency, type CurrencyCode } from './lib/currency'
+import { currencyHint, currencyOptions, displayCurrency, setDisplayCurrency, exchangeRates, exchangeRatesLoading, exchangeRatesNotice, refreshExchangeRates, type CurrencyCode } from './lib/currency'
 import { useTheme } from './lib/theme'
 
 const route = useRoute()
 useTheme()
+
+let ratesTimer: number | undefined
+function refreshVisibleRates() {
+  if (document.visibilityState === 'visible') void refreshExchangeRates()
+}
+onMounted(() => {
+  void refreshExchangeRates()
+  ratesTimer = window.setInterval(refreshVisibleRates, 60 * 60 * 1000)
+  document.addEventListener('visibilitychange', refreshVisibleRates)
+})
+onBeforeUnmount(() => {
+  window.clearInterval(ratesTimer)
+  document.removeEventListener('visibilitychange', refreshVisibleRates)
+})
 
 const activePath = computed(() => {
   if (route.path.startsWith('/monthly')) return '/monthly'
@@ -34,7 +48,13 @@ const activePath = computed(() => {
 
     <main class="content">
       <div class="top-tools">
-        <span>{{ currencyHint }}</span>
+        <div class="currency-info">
+          <span>{{ currencyHint }}</span>
+          <small v-if="exchangeRates">
+            <a href="https://www.bankofcanada.ca/rates/exchange/daily-exchange-rates/" target="_blank" rel="noopener noreferrer">Bank of Canada</a>
+            · Daily reference · {{ exchangeRates.date }}
+          </small>
+        </div>
         <el-button-group>
           <el-button
             v-for="currency in currencyOptions"
@@ -46,8 +66,13 @@ const activePath = computed(() => {
             {{ currency }}
           </el-button>
         </el-button-group>
+        <el-button size="small" :loading="exchangeRatesLoading" @click="refreshExchangeRates(true)">Refresh FX</el-button>
       </div>
-      <router-view />
+      <el-alert v-if="exchangeRatesNotice" :title="exchangeRatesNotice" type="warning" :closable="false" show-icon class="exchange-rate-notice" />
+      <router-view v-if="exchangeRates" />
+      <div v-else class="panel" role="status">
+        {{ exchangeRatesLoading ? 'Loading exchange rates…' : 'Refresh FX to load your financial overview.' }}
+      </div>
     </main>
   </div>
 </template>

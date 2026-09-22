@@ -1,3 +1,5 @@
+import { convertMoney, currencyOptions, type CurrencyCode } from './currency'
+
 export type MoneySection = 'income' | 'expense' | 'asset' | 'liability'
 export type IncomeCategory = 'Active' | 'Passive'
 export const incomeCategoryOptions: IncomeCategory[] = ['Active', 'Passive']
@@ -76,14 +78,6 @@ export interface FinanceSummary {
   netWorth: number
   passiveIncome: number
   savingsRate: number
-}
-
-type CurrencyCode = 'CNY' | 'CAD' | 'USD'
-
-const cnyPerUnit: Record<CurrencyCode, number> = {
-  CNY: 1,
-  CAD: 5.25,
-  USD: 7.2,
 }
 
 export const emptyItem = (name = '', currency = 'CAD', category = ''): MoneyItem => ({
@@ -403,13 +397,11 @@ function sumItems(items: MoneyItem[], targetCurrency: CurrencyCode) {
 
 function convertCurrency(value: number, sourceCurrency: string, targetCurrency: CurrencyCode): number {
   const source = normalizeCurrencyCode(sourceCurrency, targetCurrency)
-  if (source === targetCurrency) return Number.isFinite(value) ? value : 0
-  const valueInCny = (Number.isFinite(value) ? value : 0) * cnyPerUnit[source]
-  return valueInCny / cnyPerUnit[targetCurrency]
+  return convertMoney(Number.isFinite(value) ? value : 0, source, targetCurrency)
 }
 
 function normalizeCurrencyCode(currency: string, fallback: CurrencyCode): CurrencyCode {
-  if (currency === 'CAD' || currency === 'USD' || currency === 'CNY') return currency
+  if (currencyOptions.includes(currency as CurrencyCode)) return currency as CurrencyCode
   return fallback
 }
 

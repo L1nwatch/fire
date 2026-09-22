@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from app.exchange_rates import get_exchange_rates
 
 from app.db import (
     connect,
@@ -53,6 +54,11 @@ def startup() -> None:
 @app.get("/api/health")
 def health() -> dict[str, bool]:
     return {"ok": True}
+
+
+@app.get("/api/exchange-rates")
+def exchange_rates() -> dict[str, Any]:
+    return get_exchange_rates()
 
 
 @app.get("/api/finance")

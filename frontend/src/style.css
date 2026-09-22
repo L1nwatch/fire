@@ -150,6 +150,7 @@ body {
 
 .top-tools {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
   gap: 10px;
@@ -157,6 +158,22 @@ body {
   max-width: 1600px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.currency-info {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 280px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.currency-info a {
+  color: var(--accent-strong);
+}
+
+.exchange-rate-notice {
+  margin-bottom: 14px;
 }
 
 .theme-toggle {
