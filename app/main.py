@@ -124,8 +124,9 @@ def get_market_quote(symbol: str) -> dict[str, Any]:
             _fetch_stooq_quote,
         ]
     if is_canadian_symbol:
-        # For Canadian symbols, prefer TMX over Stooq to avoid US cross-listing mismatches.
-        provider_order = [_fetch_yahoo_quote, _fetch_yahoo_chart_quote, _fetch_tmx_quote, _fetch_stooq_quote]
+        # Keep Canadian listings on providers that report their trading currency.
+        # Stooq's CSV feed has no currency and is treated as USD below.
+        provider_order = [_fetch_yahoo_quote, _fetch_yahoo_chart_quote, _fetch_tmx_quote]
 
     errors: list[str] = []
     for fetcher in provider_order:
@@ -143,10 +144,11 @@ def _normalize_market_symbol(symbol: str) -> str:
         "NVIDIA": "NVDA",
         "NVIDIA CORP": "NVDA",
         "NVIDIA CORPORATION": "NVDA",
-        "NVDA.CA": "NVDA",
-        "NVDA.TO": "NVDA",
-        "NVDA.TSX": "NVDA",
-        "NVDA.NE": "NVDA",
+        # The Canadian CDR is distinct from the US share, with its own CAD price.
+        # .NE is the former Canadian listing; use the current TSX listing.
+        "NVDA.CA": "NVDA.TO",
+        "NVDA.TSX": "NVDA.TO",
+        "NVDA.NE": "NVDA.TO",
         "CBIL": "CBIL.TO",
         "CBIL.CA": "CBIL.TO",
         "CBIL.TSX": "CBIL.TO",
